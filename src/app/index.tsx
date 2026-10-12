@@ -1,61 +1,37 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
 
 export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
+        <ThemedView style={styles.hero}>
           <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
+            KeRoDi
+          </ThemedText>
+          <ThemedText type="subtitle" themeColor="textSecondary" style={styles.tagline}>
+            Your thoughts, in one place
           </ThemedText>
         </ThemedView>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
+        <ThemedView type="backgroundElement" style={styles.card}>
+          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.cardLabel}>
+            WELCOME
+          </ThemedText>
+          <ThemedText style={styles.cardText}>
+            KeRoDi is your simple companion for capturing ideas, reminders, and everyday thoughts.
+            Open the Notes tab to start writing — everything you save stays on your device.
+          </ThemedText>
         </ThemedView>
 
-        {Platform.OS === 'web' && <WebBadge />}
+        <ThemedView type="backgroundElement" style={styles.quoteCard}>
+          <ThemedText style={styles.quoteMark}>“</ThemedText>
+          <ThemedText style={styles.quote}>Hi, Welcome to KeRoDi Family</ThemedText>
+        </ThemedView>
       </SafeAreaView>
     </ThemedView>
   );
@@ -64,35 +40,57 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
     flexDirection: 'row',
+    justifyContent: 'center',
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
     alignItems: 'center',
-    gap: Spacing.three,
+    justifyContent: 'center',
+    gap: Spacing.four,
+    paddingHorizontal: Spacing.four,
     paddingBottom: BottomTabInset + Spacing.three,
     maxWidth: MaxContentWidth,
   },
-  heroSection: {
+  hero: {
     alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    gap: Spacing.two,
   },
   title: {
     textAlign: 'center',
   },
-  code: {
-    textTransform: 'uppercase',
+  tagline: {
+    textAlign: 'center',
   },
-  stepContainer: {
-    gap: Spacing.three,
+  card: {
     alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
+    gap: Spacing.two,
+    padding: Spacing.four,
     borderRadius: Spacing.four,
+  },
+  cardLabel: {
+    letterSpacing: 1,
+  },
+  cardText: {
+    lineHeight: 24,
+  },
+  quoteCard: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: Spacing.one,
+    paddingVertical: Spacing.four,
+    paddingHorizontal: Spacing.four,
+    borderRadius: Spacing.four,
+  },
+  quoteMark: {
+    fontSize: 44,
+    lineHeight: 40,
+    opacity: 0.4,
+  },
+  quote: {
+    fontSize: 22,
+    lineHeight: 30,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
