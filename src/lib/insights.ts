@@ -3,12 +3,14 @@
  *
  * Two ways to reach a model:
  *   1. analyzeNotesDirect — BYOK. The user's own key (from SecureStore) is sent
- *      straight to the provider. No server or hosting required.
- *   2. analyzeNotes — a hosted proxy at EXPO_PUBLIC_INSIGHTS_API_URL (or the
- *      relative /api/insights route) keeps the key server-side.
+ *      straight to the provider. No server or hosting required. This is the
+ *      default and the mode the app is built around.
+ *   2. analyzeNotes — an optional proxy that you host yourself. Point
+ *      EXPO_PUBLIC_INSIGHTS_API_URL at your endpoint to keep the key
+ *      server-side. The repo does not ship an on-device route for this.
  *
  * This module must not import expo-secure-store; the key is passed in by the
- * caller. That keeps it safe to import from the server route as well.
+ * caller. That keeps it safe to import from a server route as well.
  */
 
 import {
@@ -25,13 +27,12 @@ export type { InsightMoodLabel, InsightTheme, Note, WellbeingInsight } from './i
 export type { ProviderId } from './ai-providers';
 
 /**
- * Where the client sends notes for proxy analysis.
+ * Where the client sends notes for proxy analysis (mode 2, optional).
  *
- * - Web and local development use the relative `/api/insights` route, which
- *   Expo serves from the dev/served origin.
- * - A production native build has no ambient origin, so set
- *   `EXPO_PUBLIC_INSIGHTS_API_URL` to the absolute endpoint, or configure the
- *   Expo Router `origin` in app.json.
+ * There is no built-in route: the repo no longer ships `src/app/api/insights`,
+ * because enabling server output on the local Android build host pulls in a
+ * native CSS dependency the build node cannot load. To use proxy mode, host the
+ * endpoint yourself and set EXPO_PUBLIC_INSIGHTS_API_URL to its absolute URL.
  */
 export function insightsEndpoint(): string {
   return process.env.EXPO_PUBLIC_INSIGHTS_API_URL ?? '/api/insights';

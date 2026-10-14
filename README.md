@@ -71,11 +71,11 @@ surface recurring themes and patterns relevant to your wellbeing.
      API key into the Insights tab. It is stored in `expo-secure-store` (Android
      Keystore / iOS Keychain) and sent **only** to the provider you chose, directly from
      the device. No hosting, works from any network.
-  2. **Hosted proxy — the key stays server-side.** If no key is stored on the device,
-     the note text and dates are `POST`ed to `src/app/api/insights+api.ts`. That route
-     holds the provider key, calls the model, and returns structured insights. The key
-     is **never** shipped in the app bundle because it lives in a `+api.ts` route, which
-     Expo strips from client code. This mode requires deploying the route somewhere.
+  2. **Hosted proxy (optional) — the key stays server-side.** If no key is stored on the
+     device, the notes are `POST`ed to an endpoint you host yourself, set via
+     `EXPO_PUBLIC_INSIGHTS_API_URL`. This lets one build serve several people without
+     shipping a key. The repo does **not** bundle an on-device route for this — see
+     *Using a hosted proxy* below for why.
 
 - The provider metadata (`src/lib/ai-providers.ts`) and the prompt/response logic
   (`src/lib/insights-core.ts`) are isomorphic and shared by both modes, so they cannot
@@ -107,54 +107,49 @@ OpenAI-compatible endpoint (OpenRouter, Cerebras, a local Ollama server) via
 
 ### Configuration
 
-**BYOK needs no configuration at all** — just paste a key in the app. Everything below is
-only for the optional hosted-proxy mode.
-
-Copy `.env.example` to `.env.local` and set:
+**BYOK needs no configuration at all** — just paste a key in the app. The only
+client-side setting is the optional proxy URL:
 
 | Variable | Where | Required | Purpose |
 | --- | --- | --- | --- |
-| `GROQ_API_KEY` (or `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`) | server only | yes | Provider key for the proxy. Do **not** prefix with `EXPO_PUBLIC_`. |
-| `INSIGHTS_PROVIDER` | server only | no | Force a provider instead of auto-detecting. |
-| `INSIGHTS_MODEL` | server only | no | Override the model name. |
-| `INSIGHTS_BASE_URL` | server only | no | Override the API base URL (OpenAI-compatible hosts, local Ollama). |
-| `INSIGHTS_API_KEY` | server only | no | Generic key, used before the provider-specific one. |
-| `EXPO_PUBLIC_INSIGHTS_API_URL` | client | for release native builds | Absolute endpoint URL, e.g. `https://your-server.example.com/api/insights`. On web and local dev the relative `/api/insights` route is used automatically. |
+| `EXPO_PUBLIC_INSIGHTS_API_URL` | client | no | Absolute URL of your own proxy endpoint. Only used when no key is stored on the device. |
 
-API routes require `web.output: "server"` (already set in `app.json`) on SDK 57.
+`app.json` keeps `web.output: "static"`. We deliberately do **not** use `"server"`:
+enabling it makes Expo bundle the router server manifest, which pulls in the
+`lightningcss` native addon — and the Termux/Android build host cannot load it
+(linker namespace restriction), which fails the release bundle.
 
 ### Local testing
 
-```bash
-# Bundles the server + API route and prints the route table
-npx expo export -p web --no-ssg
+BYOK runs entirely on the device, so there is no endpoint to curl. Use the usual checks,
+then install a build and paste a key in the Insights tab:
 
-# Serve the exported output and exercise the endpoint
-npx expo serve
-curl -X POST http://localhost:3000/api/insights \
-  -H 'Content-Type: application/json' \
-  -d '{"notes":[{"id":"1","text":"slept badly","createdAt":1700000000000}]}'
+```bash
+npx tsc --noEmit
+npx expo lint
+npx expo export -p web   # verifies the app bundles
 ```
 
-With no key configured the endpoint returns `503`; with a bad key the provider error is
-returned as `502`.
-
-### Deploying the endpoint for the Android APK
+### Using a hosted proxy (optional)
 
 **Skip this entirely if you use BYOK** — with a key saved in the app, the native build
 talks to the provider directly and needs no server.
 
-The proxy is only needed when you want to keep the key server-side (for example, to
-share one build with other people). The Android app is a native build with no ambient web
-origin, so a relative `/api/insights` will not resolve. Deploy the server (e.g.
-`eas deploy`, or any Node host) and do one of:
+Proxy mode is for when you want to keep the key server-side (for example, to share one
+build without shipping a key). To use it, host your own endpoint that accepts
+`{ notes: [...] }` and returns a `WellbeingInsight` (see `src/lib/insights-types.ts`),
+then set `EXPO_PUBLIC_INSIGHTS_API_URL` before building. The shared, secret-free modules
+(`src/lib/insights-core.ts`, `src/lib/ai-providers.ts`) can be reused in that server.
 
-- set `EXPO_PUBLIC_INSIGHTS_API_URL` to the deployed endpoint before building, **or**
-- configure the Expo Router `origin` in `app.json` (this part of Expo's server support is
-  marked **alpha**).
+The repo intentionally ships **no** on-device route. An earlier revision had one at
+`src/app/api/insights+api.ts`, which required `web.output: "server"`. That makes Expo
+bundle the router **server manifest**, which imports web CSS and therefore the
+`lightningcss` native addon — and the Termux/Android build host cannot `dlopen` it
+(linker namespace restriction), failing `createBundleReleaseJsAndAssets`. Keeping
+`web.output: "static"` is what makes the Android release build succeed there.
 
-Native release builds without either, and with no key saved, will show a "Could not
-generate" error at runtime. With a key saved in the app, BYOK is used instead.
+Native release builds with no key saved and no proxy URL will show a "Could not
+generate" error at runtime.
 
 ### Privacy
 
