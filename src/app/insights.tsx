@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -32,28 +33,31 @@ export default function InsightsScreen() {
   const [insight, setInsight] = useState<WellbeingInsight | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Load persisted notes + consent once, when the screen first mounts.
-  useEffect(() => {
-    let active = true;
+  // Load persisted notes + consent whenever the tab gains focus, so notes
+  // written in the Notes tab are picked up without needing a remount.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
 
-    Promise.all([AsyncStorage.getItem(NOTES_KEY), AsyncStorage.getItem(CONSENT_KEY)])
-      .then(([notesRaw, consentRaw]) => {
-        if (!active) return;
-        if (notesRaw) {
-          const parsed = JSON.parse(notesRaw) as Note[];
-          if (Array.isArray(parsed)) setNotes(parsed);
-        }
-        setConsent(consentRaw === 'true');
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (active) setReady(true);
-      });
+      Promise.all([AsyncStorage.getItem(NOTES_KEY), AsyncStorage.getItem(CONSENT_KEY)])
+        .then(([notesRaw, consentRaw]) => {
+          if (!active) return;
+          if (notesRaw) {
+            const parsed = JSON.parse(notesRaw) as Note[];
+            if (Array.isArray(parsed)) setNotes(parsed);
+          }
+          setConsent(consentRaw === 'true');
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (active) setReady(true);
+        });
 
-    return () => {
-      active = false;
-    };
-  }, []);
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   const grantConsent = useCallback(() => {
     setConsent(true);
