@@ -1,16 +1,18 @@
-import type { InsightMoodLabel, InsightTheme, Note, WellbeingInsight } from '@/lib/insights';
+import type {
+  InsightMoodLabel,
+  InsightTheme,
+  Note,
+  WellbeingInsight,
+} from '@/lib/insights';
+import { keyEnvHint, resolveProvider, runInsights } from '@/server/insights-provider';
 
 /**
  * Server-side proxy for the Wellbeing Insights feature.
  *
  * This file runs on the server only. Because it is a `+api.ts` route, the
- * provider API key read below is stripped from the client bundle by
+ * provider API key read here is stripped from the client bundle by
  * expo/metro-config. Never move this logic into client code.
  */
-
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_VERSION = '2023-06-01';
-const MODEL = process.env.INSIGHTS_MODEL ?? 'claude-sonnet-5';
 
 /** Guardrails so a huge journal can't blow past the model's context/cost. */
 const MAX_NOTES = 200;
@@ -39,9 +41,10 @@ function asThemes(value: unknown): InsightTheme[] {
       const record = item as Record<string, unknown>;
       const label = asString(record.label).trim();
       if (!label) return null;
-      const count = typeof record.count === 'number' && Number.isFinite(record.count)
-        ? Math.max(0, Math.round(record.count))
-        : 0;
+      const count =
+        typeof record.count === 'number' && Number.isFinite(record.count)
+          ? Math.max(0, Math.round(record.count))
+          : 0;
       return { label, count, examples: asStringArray(record.examples).slice(0, 3) };
     })
     .filter((theme): theme is InsightTheme => theme !== null)
@@ -60,16 +63,22 @@ function extractJson(text: string): unknown | null {
   }
 }
 
-function normalizeInsight(raw: unknown, analyzedCount: number): WellbeingInsight | null {
+function normalizeInsight(
+  raw: unknown,
+  analyzedCount: number,
+  provider: string,
+  model: string,
+): WellbeingInsight | null {
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as Record<string, unknown>;
 
   const moodRecord = (record.mood ?? {}) as Record<string, unknown>;
   const rawLabel = asString(moodRecord.label).toLowerCase() as InsightMoodLabel;
   const label: InsightMoodLabel = MOOD_LABELS.includes(rawLabel) ? rawLabel : 'neutral';
-  const rawScore = typeof moodRecord.score === 'number' && Number.isFinite(moodRecord.score)
-    ? moodRecord.score
-    : 0;
+  const rawScore =
+    typeof moodRecord.score === 'number' && Number.isFinite(moodRecord.score)
+      ? moodRecord.score
+      : 0;
 
   const summary = asString(record.summary).trim();
   if (!summary) return null;
@@ -86,7 +95,8 @@ function normalizeInsight(raw: unknown, analyzedCount: number): WellbeingInsight
     concerns: asStringArray(record.concerns),
     suggestions: asStringArray(record.suggestions),
     analyzedCount,
-    model: MODEL,
+    provider,
+    model,
     generatedAt: Date.now(),
   };
 }
@@ -123,12 +133,9 @@ function buildPrompt(notes: Note[]): string {
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return jsonError(
-      503,
-      'AI insights are not configured on the server. Set ANTHROPIC_API_KEY.',
-    );
+  const provider = resolveProvider();
+  if (!provider) {
+    return jsonError(503, `AI insights are not configured on the server. Set ${keyEnvHint()}.`);
   }
 
   let payload: unknown;
@@ -157,38 +164,14 @@ export async function POST(request: Request) {
     return jsonError(400, 'No notes to analyse.');
   }
 
-  let upstream: Response;
+  let text: string;
   try {
-    upstream = await fetch(ANTHROPIC_URL, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 2000,
-        temperature: 0.2,
-        messages: [{ role: 'user', content: buildPrompt(notes) }],
-      }),
-    });
+    text = await runInsights(buildPrompt(notes), provider);
   } catch (error) {
-    return jsonError(502, `Could not reach the AI provider: ${(error as Error).message}`);
+    return jsonError(502, `${provider.id} error ${(error as Error).message}`);
   }
 
-  if (!upstream.ok) {
-    const detail = await upstream.text().catch(() => '');
-    return jsonError(502, `AI provider error (${upstream.status}): ${detail.slice(0, 300)}`);
-  }
-
-  const data = (await upstream.json()) as { content?: { type?: string; text?: string }[] };
-  const text = (data.content ?? [])
-    .map((part) => (part.type === 'text' ? part.text ?? '' : ''))
-    .join('')
-    .trim();
-
-  const insight = normalizeInsight(extractJson(text), notes.length);
+  const insight = normalizeInsight(extractJson(text), notes.length, provider.id, provider.model);
   if (!insight) {
     return jsonError(502, 'The AI returned an unexpected response format.');
   }

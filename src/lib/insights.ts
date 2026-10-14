@@ -37,6 +37,8 @@ export type WellbeingInsight = {
   suggestions: string[];
   /** Number of notes that were analysed. */
   analyzedCount: number;
+  /** Provider identifier that produced the analysis, e.g. "groq". */
+  provider: string;
   /** Model identifier that produced the analysis. */
   model: string;
   generatedAt: number;

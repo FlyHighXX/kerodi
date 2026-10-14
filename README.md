@@ -70,14 +70,35 @@ surface recurring themes and patterns relevant to your wellbeing.
   returns structured insights. The key is **never** shipped in the app bundle because it
   lives in a `+api.ts` route, which Expo strips from client code.
 
+### Choosing an AI provider
+
+The proxy is provider-agnostic. Set a key for one provider; it is auto-detected
+(order: `groq`, `gemini`, `openai`, `anthropic`), or set `INSIGHTS_PROVIDER` to
+pick explicitly.
+
+| Provider | Free tier | Trains/retains on your data? | Default model |
+| --- | --- | --- | --- |
+| `groq` (recommended) | yes | No by default; Zero Data Retention available | `openai/gpt-oss-120b` |
+| `gemini` | yes | Free tier may use data to improve Google products | `gemini-3.8-flash` |
+| `openai` | no | No | `gpt-4o-mini` |
+| `anthropic` | no | No | `claude-sonnet-5` |
+
+Because these notes are sensitive, `groq` is the default recommendation: it is
+free and does not retain inference data by default. `openai` also works with any
+OpenAI-compatible endpoint (OpenRouter, Cerebras, a local Ollama server) via
+`INSIGHTS_BASE_URL`.
+
 ### Configuration
 
 Copy `.env.example` to `.env.local` and set:
 
 | Variable | Where | Required | Purpose |
 | --- | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | server only | yes | Provider key for the proxy. Do **not** prefix with `EXPO_PUBLIC_`. |
-| `INSIGHTS_MODEL` | server only | no | Override the model (default `claude-sonnet-5`). |
+| `GROQ_API_KEY` (or `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`) | server only | yes | Provider key for the proxy. Do **not** prefix with `EXPO_PUBLIC_`. |
+| `INSIGHTS_PROVIDER` | server only | no | Force a provider instead of auto-detecting. |
+| `INSIGHTS_MODEL` | server only | no | Override the model name. |
+| `INSIGHTS_BASE_URL` | server only | no | Override the API base URL (OpenAI-compatible hosts, local Ollama). |
+| `INSIGHTS_API_KEY` | server only | no | Generic key, used before the provider-specific one. |
 | `EXPO_PUBLIC_INSIGHTS_API_URL` | client | for release native builds | Absolute endpoint URL, e.g. `https://your-server.example.com/api/insights`. On web and local dev the relative `/api/insights` route is used automatically. |
 
 API routes require `web.output: "server"` (already set in `app.json`) on SDK 57.

@@ -238,7 +238,7 @@ function InsightView({ insight }: { insight: WellbeingInsight }) {
 
       <ThemedText type="small" themeColor="textSecondary" style={styles.footer}>
         Based on {insight.analyzedCount} note{insight.analyzedCount === 1 ? '' : 's'} ·{' '}
-        {formatGeneratedAt(insight.generatedAt)} · {insight.model}
+        {formatGeneratedAt(insight.generatedAt)} · {insight.provider}/{insight.model}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary" style={styles.footer}>
         This is not medical advice.
