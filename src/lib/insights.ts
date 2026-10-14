@@ -1,51 +1,31 @@
 /**
- * Shared types and client for the Wellbeing Insights feature.
+ * Client-side API for the Wellbeing Insights feature.
  *
- * The model call itself happens on the server in `src/app/api/insights+api.ts`
- * so that the provider API key is never included in the client bundle.
+ * Two ways to reach a model:
+ *   1. analyzeNotesDirect — BYOK. The user's own key (from SecureStore) is sent
+ *      straight to the provider. No server or hosting required.
+ *   2. analyzeNotes — a hosted proxy at EXPO_PUBLIC_INSIGHTS_API_URL (or the
+ *      relative /api/insights route) keeps the key server-side.
+ *
+ * This module must not import expo-secure-store; the key is passed in by the
+ * caller. That keeps it safe to import from the server route as well.
  */
 
-/** A single note, stored locally by the Notes tab. */
-export type Note = {
-  id: string;
-  text: string;
-  createdAt: number;
-};
+import {
+  PROVIDERS,
+  detectProviderFromKey,
+  runProvider,
+  type ProviderConfig,
+  type ProviderId,
+} from './ai-providers';
+import { MAX_NOTES, buildPrompt, extractJson, normalizeInsight } from './insights-core';
+import type { Note, WellbeingInsight } from './insights-types';
 
-export type InsightMoodLabel = 'positive' | 'neutral' | 'mixed' | 'low';
-
-export type InsightTheme = {
-  /** Short human-readable theme label, e.g. "sleep", "work stress". */
-  label: string;
-  /** How many notes this theme appears in. */
-  count: number;
-  /** One or two short verbatim-ish examples from the notes. */
-  examples: string[];
-};
-
-export type WellbeingInsight = {
-  summary: string;
-  mood: {
-    label: InsightMoodLabel;
-    /** -1 (low) .. 1 (positive). */
-    score: number;
-    rationale: string;
-  };
-  themes: InsightTheme[];
-  positivePatterns: string[];
-  concerns: string[];
-  suggestions: string[];
-  /** Number of notes that were analysed. */
-  analyzedCount: number;
-  /** Provider identifier that produced the analysis, e.g. "groq". */
-  provider: string;
-  /** Model identifier that produced the analysis. */
-  model: string;
-  generatedAt: number;
-};
+export type { InsightMoodLabel, InsightTheme, Note, WellbeingInsight } from './insights-types';
+export type { ProviderId } from './ai-providers';
 
 /**
- * Where the client sends notes for analysis.
+ * Where the client sends notes for proxy analysis.
  *
  * - Web and local development use the relative `/api/insights` route, which
  *   Expo serves from the dev/served origin.
@@ -57,7 +37,18 @@ export function insightsEndpoint(): string {
   return process.env.EXPO_PUBLIC_INSIGHTS_API_URL ?? '/api/insights';
 }
 
-/** Ask the server to analyse the given notes. Throws on any failure. */
+function toError(status: number, body: unknown): Error {
+  const message =
+    body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string'
+      ? (body as { error: string }).error
+      : `Request failed (${status})`;
+  return new Error(message);
+}
+
+/**
+ * Analyse notes through the hosted proxy. The key lives on the server, so
+ * nothing secret is needed here.
+ */
 export async function analyzeNotes(notes: Note[]): Promise<WellbeingInsight> {
   const response = await fetch(insightsEndpoint(), {
     method: 'POST',
@@ -68,15 +59,48 @@ export async function analyzeNotes(notes: Note[]): Promise<WellbeingInsight> {
   });
 
   if (!response.ok) {
-    let message = `Request failed (${response.status})`;
+    let body: unknown = null;
     try {
-      const body = (await response.json()) as { error?: string };
-      if (body?.error) message = body.error;
+      body = await response.json();
     } catch {
       // keep the generic message
     }
-    throw new Error(message);
+    throw toError(response.status, body);
   }
 
   return (await response.json()) as WellbeingInsight;
+}
+
+/**
+ * Analyse notes directly against the provider using the user's own key (BYOK).
+ * No server involved — the key goes straight from the device to the provider.
+ */
+export async function analyzeNotesDirect(
+  notes: Note[],
+  apiKey: string,
+  providerId?: ProviderId | null,
+): Promise<WellbeingInsight> {
+  const id = providerId ?? detectProviderFromKey(apiKey) ?? 'groq';
+  const meta = PROVIDERS[id];
+  const config: ProviderConfig = {
+    id,
+    apiKey: apiKey.trim(),
+    baseUrl: meta.baseUrl,
+    model: meta.model,
+  };
+
+  const usable = notes
+    .filter((note) => typeof note.text === 'string' && note.text.trim().length > 0)
+    .slice(0, MAX_NOTES);
+
+  if (usable.length === 0) {
+    throw new Error('No notes to analyse.');
+  }
+
+  const text = await runProvider(buildPrompt(usable), config);
+  const insight = normalizeInsight(extractJson(text), usable.length, id, meta.model);
+  if (!insight) {
+    throw new Error('The AI returned an unexpected response format.');
+  }
+  return insight;
 }

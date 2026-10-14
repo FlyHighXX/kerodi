@@ -65,14 +65,31 @@ surface recurring themes and patterns relevant to your wellbeing.
 - Notes are stored on-device (`AsyncStorage`, key `kerodi.notes.v1`) by the Notes tab.
 - Nothing is sent anywhere until you open Insights and explicitly enable it (a one-time
   opt-in is stored under `kerodi.ai.consent.v1`), then tap **Generate insights**.
-- On request, the note text and dates are `POST`ed to a server-side proxy at
-  `src/app/api/insights+api.ts`. The proxy holds the provider key, calls the model, and
-  returns structured insights. The key is **never** shipped in the app bundle because it
-  lives in a `+api.ts` route, which Expo strips from client code.
+- Analysis can run in one of two modes:
+
+  1. **Bring your own key (BYOK) — no server needed.** You paste your own provider
+     API key into the Insights tab. It is stored in `expo-secure-store` (Android
+     Keystore / iOS Keychain) and sent **only** to the provider you chose, directly from
+     the device. No hosting, works from any network.
+  2. **Hosted proxy — the key stays server-side.** If no key is stored on the device,
+     the note text and dates are `POST`ed to `src/app/api/insights+api.ts`. That route
+     holds the provider key, calls the model, and returns structured insights. The key
+     is **never** shipped in the app bundle because it lives in a `+api.ts` route, which
+     Expo strips from client code. This mode requires deploying the route somewhere.
+
+- The provider metadata (`src/lib/ai-providers.ts`) and the prompt/response logic
+  (`src/lib/insights-core.ts`) are isomorphic and shared by both modes, so they cannot
+  drift apart.
+
+> **Privacy note on BYOK:** since it is your own key, nothing of yours is exposed to
+> anyone else. The key sits on your device in encrypted storage — it is only as safe as
+> the device itself. For a free, no-billing key that is an acceptable trade.
 
 ### Choosing an AI provider
 
-The proxy is provider-agnostic. Set a key for one provider; it is auto-detected
+Both modes are provider-agnostic. In BYOK mode the provider is detected from the key
+prefix (Groq keys start with `gsk_`, Gemini with `AIza`, …) and can be overridden in
+the UI. In proxy mode, set a key for one provider; it is auto-detected
 (order: `groq`, `gemini`, `openai`, `anthropic`), or set `INSIGHTS_PROVIDER` to
 pick explicitly.
 
@@ -89,6 +106,9 @@ OpenAI-compatible endpoint (OpenRouter, Cerebras, a local Ollama server) via
 `INSIGHTS_BASE_URL`.
 
 ### Configuration
+
+**BYOK needs no configuration at all** — just paste a key in the app. Everything below is
+only for the optional hosted-proxy mode.
 
 Copy `.env.example` to `.env.local` and set:
 
@@ -121,20 +141,26 @@ returned as `502`.
 
 ### Deploying the endpoint for the Android APK
 
-The Android app is a native build with no ambient web origin, so a relative
-`/api/insights` will not resolve. Deploy the server (e.g. `eas deploy`, or any Node host)
-and do one of:
+**Skip this entirely if you use BYOK** — with a key saved in the app, the native build
+talks to the provider directly and needs no server.
+
+The proxy is only needed when you want to keep the key server-side (for example, to
+share one build with other people). The Android app is a native build with no ambient web
+origin, so a relative `/api/insights` will not resolve. Deploy the server (e.g.
+`eas deploy`, or any Node host) and do one of:
 
 - set `EXPO_PUBLIC_INSIGHTS_API_URL` to the deployed endpoint before building, **or**
 - configure the Expo Router `origin` in `app.json` (this part of Expo's server support is
   marked **alpha**).
 
-Native release builds without either will show a "Could not generate" error at runtime.
+Native release builds without either, and with no key saved, will show a "Could not
+generate" error at runtime. With a key saved in the app, BYOK is used instead.
 
 ### Privacy
 
-Enabling Insights sends your note text to the configured AI provider. It is off by
-default and can be turned off at any time from the tab. The rest of the app keeps its
+Enabling Insights sends your note text to the AI provider you chose. It is off by
+default and can be turned off at any time from the tab. In BYOK mode the key and the
+notes go only to that provider, straight from your device. The rest of the app keeps its
 notes on-device.
 
 ## CI / builds

@@ -1,14 +1,42 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ExternalLink } from '@/components/external-link';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { analyzeNotes, type Note, type InsightTheme, type WellbeingInsight } from '@/lib/insights';
+import {
+  clearStoredApiKey,
+  clearStoredProvider,
+  getStoredApiKey,
+  getStoredProvider,
+  setStoredApiKey,
+  setStoredProvider,
+} from '@/lib/ai-key';
+import {
+  PROVIDERS,
+  PROVIDER_ORDER,
+  detectProviderFromKey,
+  type ProviderId,
+} from '@/lib/ai-providers';
+import {
+  analyzeNotes,
+  analyzeNotesDirect,
+  type InsightTheme,
+  type Note,
+  type WellbeingInsight,
+} from '@/lib/insights';
 
 const NOTES_KEY = 'kerodi.notes.v1';
 const CONSENT_KEY = 'kerodi.ai.consent.v1';
@@ -29,24 +57,39 @@ export default function InsightsScreen() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [consent, setConsent] = useState(false);
   const [ready, setReady] = useState(false);
+  const [storedKey, setStoredKey] = useState<string | null>(null);
+  const [providerId, setProviderId] = useState<ProviderId | null>(null);
   const [status, setStatus] = useState<Status>('idle');
   const [insight, setInsight] = useState<WellbeingInsight | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Load persisted notes + consent whenever the tab gains focus, so notes
-  // written in the Notes tab are picked up without needing a remount.
+  // Key entry state.
+  const [editingKey, setEditingKey] = useState(false);
+  const [keyDraft, setKeyDraft] = useState('');
+  const [draftProvider, setDraftProvider] = useState<ProviderId>('groq');
+
+  // Reload everything whenever the tab gains focus, so notes written in the
+  // Notes tab are picked up without needing a remount.
   useFocusEffect(
     useCallback(() => {
       let active = true;
 
-      Promise.all([AsyncStorage.getItem(NOTES_KEY), AsyncStorage.getItem(CONSENT_KEY)])
-        .then(([notesRaw, consentRaw]) => {
+      Promise.all([
+        AsyncStorage.getItem(NOTES_KEY),
+        AsyncStorage.getItem(CONSENT_KEY),
+        getStoredApiKey(),
+        getStoredProvider(),
+      ])
+        .then(([notesRaw, consentRaw, key, provider]) => {
           if (!active) return;
           if (notesRaw) {
             const parsed = JSON.parse(notesRaw) as Note[];
             if (Array.isArray(parsed)) setNotes(parsed);
           }
           setConsent(consentRaw === 'true');
+          setStoredKey(key);
+          setProviderId(provider);
+          if (provider) setDraftProvider(provider);
         })
         .catch(() => {})
         .finally(() => {
@@ -59,9 +102,44 @@ export default function InsightsScreen() {
     }, []),
   );
 
-  const grantConsent = useCallback(() => {
-    setConsent(true);
-    AsyncStorage.setItem(CONSENT_KEY, 'true').catch(() => {});
+  const onChangeKey = useCallback((value: string) => {
+    setKeyDraft(value);
+    const detected = detectProviderFromKey(value);
+    if (detected) setDraftProvider(detected);
+  }, []);
+
+  /** Persist the draft key (or reuse the saved one if the field is blank). */
+  const saveKey = useCallback(
+    (enable: boolean) => {
+      const trimmed = keyDraft.trim();
+      if (!trimmed && !storedKey) return;
+
+      const writes: Promise<unknown>[] = [];
+      if (trimmed) {
+        const id = detectProviderFromKey(trimmed) ?? draftProvider;
+        setStoredKey(trimmed);
+        setProviderId(id);
+        writes.push(setStoredApiKey(trimmed), setStoredProvider(id));
+      }
+      if (enable) {
+        setConsent(true);
+        writes.push(AsyncStorage.setItem(CONSENT_KEY, 'true'));
+      }
+
+      setEditingKey(false);
+      setKeyDraft('');
+      setError(null);
+      Promise.all(writes).catch(() => {});
+    },
+    [draftProvider, keyDraft, storedKey],
+  );
+
+  const removeKey = useCallback(() => {
+    setStoredKey(null);
+    setProviderId(null);
+    setEditingKey(false);
+    setKeyDraft('');
+    Promise.all([clearStoredApiKey(), clearStoredProvider()]).catch(() => {});
   }, []);
 
   const revokeConsent = useCallback(() => {
@@ -69,13 +147,22 @@ export default function InsightsScreen() {
     setInsight(null);
     setError(null);
     setStatus('idle');
+    setEditingKey(false);
     AsyncStorage.removeItem(CONSENT_KEY).catch(() => {});
+  }, []);
+
+  /** Opt in without a personal key — the notes go to a hosted proxy instead. */
+  const enableProxy = useCallback(() => {
+    setConsent(true);
+    setError(null);
+    AsyncStorage.setItem(CONSENT_KEY, 'true').catch(() => {});
   }, []);
 
   const generate = useCallback(() => {
     setStatus('loading');
     setError(null);
-    analyzeNotes(notes)
+    const task = storedKey ? analyzeNotesDirect(notes, storedKey, providerId) : analyzeNotes(notes);
+    task
       .then((result) => {
         setInsight(result);
         setStatus('idle');
@@ -84,7 +171,41 @@ export default function InsightsScreen() {
         setError(cause instanceof Error ? cause.message : 'Something went wrong.');
         setStatus('error');
       });
-  }, [notes]);
+  }, [notes, providerId, storedKey]);
+
+  const providerLabel = providerId ? PROVIDERS[providerId].label : null;
+
+  const renderKeyForm = (primaryLabel: string, enable: boolean) => (
+    <>
+      <TextInput
+        value={keyDraft}
+        onChangeText={onChangeKey}
+        placeholder={storedKey ? 'Leave blank to keep your saved key' : 'Paste your API key'}
+        placeholderTextColor={theme.textSecondary}
+        autoCapitalize="none"
+        autoCorrect={false}
+        secureTextEntry
+        style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
+      />
+      <ProviderChips selected={draftProvider} onSelect={setDraftProvider} />
+      <ThemedText type="small" themeColor="textSecondary">
+        Get a {PROVIDERS[draftProvider].free ? 'free ' : ''}key from{' '}
+        <ExternalLink href={PROVIDERS[draftProvider].docsUrl} style={styles.inlineLink}>
+          <ThemedText type="link">{PROVIDERS[draftProvider].label}</ThemedText>
+        </ExternalLink>
+        . It is stored encrypted on this device.
+      </ThemedText>
+      <Pressable
+        onPress={() => saveKey(enable)}
+        style={({ pressed }) => [
+          styles.button,
+          { backgroundColor: theme.backgroundSelected },
+          pressed && styles.pressed,
+        ]}>
+        <ThemedText type="smallBold">{primaryLabel}</ThemedText>
+      </Pressable>
+    </>
+  );
 
   const renderBody = () => {
     if (!ready) {
@@ -112,24 +233,21 @@ export default function InsightsScreen() {
       return (
         <ThemedView type="backgroundElement" style={styles.card}>
           <ThemedText type="smallBold" themeColor="textSecondary">
-            OPT-IN REQUIRED
+            SET UP AI INSIGHTS
           </ThemedText>
           <ThemedText style={styles.bodyText}>
-            Insights uses an AI model to look for patterns across your notes. When you tap the button
-            below, the text and dates of your {notes.length} note{notes.length === 1 ? '' : 's'} are
-            sent to our server and on to an AI provider for analysis. Nothing is sent until you ask.
+            Insights sends your notes to an AI model to look for patterns. You bring your own API
+            key — it stays on this device and is sent only to the provider you choose. Nothing is
+            sent until you tap Generate.
           </ThemedText>
-          <ThemedText style={styles.bodyText} themeColor="textSecondary">
-            Your notes stay on this device otherwise. You can turn this off again at any time.
-          </ThemedText>
+          {renderKeyForm('Save key & enable', true)}
           <Pressable
-            onPress={grantConsent}
-            style={({ pressed }) => [
-              styles.button,
-              { backgroundColor: theme.backgroundSelected },
-              pressed && styles.pressed,
-            ]}>
-            <ThemedText type="smallBold">Enable AI insights</ThemedText>
+            onPress={storedKey ? () => saveKey(true) : enableProxy}
+            hitSlop={8}
+            style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
+            <ThemedText type="small" themeColor="textSecondary">
+              {storedKey ? 'Enable with saved key' : 'Enable without a key (use a hosted server)'}
+            </ThemedText>
           </Pressable>
         </ThemedView>
       );
@@ -139,6 +257,25 @@ export default function InsightsScreen() {
 
     return (
       <View style={styles.content}>
+        <ThemedView type="backgroundElement" style={styles.card}>
+          <View style={styles.keyHeader}>
+            <ThemedText type="small" themeColor="textSecondary">
+              {providerLabel ? `Using your ${providerLabel} key` : 'Using a hosted server'}
+            </ThemedText>
+            {storedKey ? (
+              <View style={styles.keyActions}>
+                <Pressable onPress={() => setEditingKey((v) => !v)} hitSlop={8}>
+                  <ThemedText type="link">Change</ThemedText>
+                </Pressable>
+                <Pressable onPress={removeKey} hitSlop={8}>
+                  <ThemedText type="link">Remove</ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+          {!storedKey || editingKey ? renderKeyForm('Save key', false) : null}
+        </ThemedView>
+
         <Pressable
           onPress={generate}
           disabled={loading}
@@ -174,7 +311,7 @@ export default function InsightsScreen() {
         <Pressable
           onPress={revokeConsent}
           hitSlop={8}
-          style={({ pressed }) => [styles.revoke, pressed && styles.pressed]}>
+          style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
           <ThemedText type="small" themeColor="textSecondary">
             Turn off AI insights
           </ThemedText>
@@ -203,6 +340,37 @@ export default function InsightsScreen() {
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+function ProviderChips({
+  selected,
+  onSelect,
+}: {
+  selected: ProviderId;
+  onSelect: (id: ProviderId) => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={styles.chipRow}>
+      {PROVIDER_ORDER.map((id) => {
+        const active = id === selected;
+        return (
+          <Pressable
+            key={id}
+            onPress={() => onSelect(id)}
+            style={({ pressed }) => [
+              styles.chip,
+              { backgroundColor: active ? theme.backgroundSelected : theme.background },
+              pressed && styles.pressed,
+            ]}>
+            <ThemedText type="small" themeColor={active ? 'text' : 'textSecondary'}>
+              {PROVIDERS[id].label}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -319,6 +487,35 @@ const styles = StyleSheet.create({
   bodyText: {
     lineHeight: 22,
   },
+  input: {
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    fontSize: 15,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  chip: {
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Spacing.three,
+  },
+  keyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  keyActions: {
+    flexDirection: 'row',
+    gap: Spacing.three,
+  },
+  inlineLink: {
+    verticalAlign: 'middle',
+  },
   button: {
     alignSelf: 'flex-start',
     paddingVertical: Spacing.two,
@@ -328,6 +525,10 @@ const styles = StyleSheet.create({
   buttonFull: {
     alignSelf: 'stretch',
     alignItems: 'center',
+  },
+  secondary: {
+    alignSelf: 'center',
+    paddingVertical: Spacing.one,
   },
   disabled: {
     opacity: 0.5,
@@ -356,10 +557,6 @@ const styles = StyleSheet.create({
   bulletText: {
     flex: 1,
     lineHeight: 22,
-  },
-  revoke: {
-    alignSelf: 'center',
-    paddingVertical: Spacing.two,
   },
   footer: {
     textAlign: 'center',
