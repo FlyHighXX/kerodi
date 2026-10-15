@@ -25,6 +25,11 @@ import {
   setStoredProvider,
 } from '@/lib/ai-key';
 import {
+  clearStoredInstructions,
+  getStoredInstructions,
+  setStoredInstructions,
+} from '@/lib/ai-instructions';
+import {
   PROVIDERS,
   PROVIDER_ORDER,
   detectProviderFromKey,
@@ -37,6 +42,7 @@ import {
   type Note,
   type WellbeingInsight,
 } from '@/lib/insights';
+import { DEFAULT_INSTRUCTIONS } from '@/lib/insights-prompt';
 
 const NOTES_KEY = 'kerodi.notes.v1';
 const CONSENT_KEY = 'kerodi.ai.consent.v1';
@@ -68,6 +74,11 @@ export default function InsightsScreen() {
   const [keyDraft, setKeyDraft] = useState('');
   const [draftProvider, setDraftProvider] = useState<ProviderId>('groq');
 
+  // Custom AI instructions ("persona"). null means "use the bundled default".
+  const [instructions, setInstructions] = useState<string | null>(null);
+  const [editingInstructions, setEditingInstructions] = useState(false);
+  const [instructionsDraft, setInstructionsDraft] = useState('');
+
   // Reload everything whenever the tab gains focus, so notes written in the
   // Notes tab are picked up without needing a remount.
   useFocusEffect(
@@ -79,8 +90,9 @@ export default function InsightsScreen() {
         AsyncStorage.getItem(CONSENT_KEY),
         getStoredApiKey(),
         getStoredProvider(),
+        getStoredInstructions(),
       ])
-        .then(([notesRaw, consentRaw, key, provider]) => {
+        .then(([notesRaw, consentRaw, key, provider, custom]) => {
           if (!active) return;
           if (notesRaw) {
             const parsed = JSON.parse(notesRaw) as Note[];
@@ -90,6 +102,7 @@ export default function InsightsScreen() {
           setStoredKey(key);
           setProviderId(provider);
           if (provider) setDraftProvider(provider);
+          setInstructions(custom);
         })
         .catch(() => {})
         .finally(() => {
@@ -142,6 +155,29 @@ export default function InsightsScreen() {
     Promise.all([clearStoredApiKey(), clearStoredProvider()]).catch(() => {});
   }, []);
 
+  /** Open the editor, seeding the draft with the current (or default) persona. */
+  const toggleInstructions = useCallback(() => {
+    if (!editingInstructions) setInstructionsDraft(instructions ?? DEFAULT_INSTRUCTIONS);
+    setEditingInstructions((open) => !open);
+  }, [editingInstructions, instructions]);
+
+  /** Persist the draft. Blank (or unchanged-from-default) input clears it. */
+  const saveInstructions = useCallback(() => {
+    const trimmed = instructionsDraft.trim();
+    const next = !trimmed || trimmed === DEFAULT_INSTRUCTIONS.trim() ? null : trimmed;
+    setInstructions(next);
+    setEditingInstructions(false);
+    setInstructionsDraft('');
+    setError(null);
+    (next ? setStoredInstructions(next) : clearStoredInstructions()).catch(() => {});
+  }, [instructionsDraft]);
+
+  const resetInstructions = useCallback(() => {
+    setInstructions(null);
+    setInstructionsDraft('');
+    clearStoredInstructions().catch(() => {});
+  }, []);
+
   const revokeConsent = useCallback(() => {
     setConsent(false);
     setInsight(null);
@@ -161,7 +197,9 @@ export default function InsightsScreen() {
   const generate = useCallback(() => {
     setStatus('loading');
     setError(null);
-    const task = storedKey ? analyzeNotesDirect(notes, storedKey, providerId) : analyzeNotes(notes);
+    const task = storedKey
+      ? analyzeNotesDirect(notes, storedKey, providerId, instructions)
+      : analyzeNotes(notes, instructions);
     task
       .then((result) => {
         setInsight(result);
@@ -171,7 +209,7 @@ export default function InsightsScreen() {
         setError(cause instanceof Error ? cause.message : 'Something went wrong.');
         setStatus('error');
       });
-  }, [notes, providerId, storedKey]);
+  }, [instructions, notes, providerId, storedKey]);
 
   const providerLabel = providerId ? PROVIDERS[providerId].label : null;
 
@@ -274,6 +312,54 @@ export default function InsightsScreen() {
             ) : null}
           </View>
           {!storedKey || editingKey ? renderKeyForm('Save key', false) : null}
+        </ThemedView>
+
+        <ThemedView type="backgroundElement" style={styles.card}>
+          <View style={styles.keyHeader}>
+            <ThemedText type="small" themeColor="textSecondary">
+              INSTRUCTIONS TO THE AI
+            </ThemedText>
+            <Pressable onPress={toggleInstructions} hitSlop={8}>
+              <ThemedText type="link">{editingInstructions ? 'Close' : 'Edit'}</ThemedText>
+            </Pressable>
+          </View>
+          {editingInstructions ? (
+            <>
+              <TextInput
+                value={instructionsDraft}
+                onChangeText={setInstructionsDraft}
+                placeholder={DEFAULT_INSTRUCTIONS}
+                placeholderTextColor={theme.textSecondary}
+                multiline
+                textAlignVertical="top"
+                autoCapitalize="sentences"
+                autoCorrect
+                style={[
+                  styles.input,
+                  styles.multilineInput,
+                  { backgroundColor: theme.background, color: theme.text },
+                ]}
+              />
+              <ThemedText type="small" themeColor="textSecondary">
+                Tell the AI how to read your notes. The required response format is added
+                automatically, so your wording can&apos;t break it.
+              </ThemedText>
+              <View style={styles.keyActions}>
+                <Pressable onPress={saveInstructions} hitSlop={8}>
+                  <ThemedText type="link">Save</ThemedText>
+                </Pressable>
+                <Pressable onPress={resetInstructions} hitSlop={8}>
+                  <ThemedText type="link">Reset to default</ThemedText>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
+              {instructions
+                ? 'Using your custom instructions.'
+                : 'Using the default instructions.'}
+            </ThemedText>
+          )}
         </ThemedView>
 
         <Pressable
@@ -492,6 +578,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     fontSize: 15,
+  },
+  multilineInput: {
+    minHeight: 120,
   },
   chipRow: {
     flexDirection: 'row',

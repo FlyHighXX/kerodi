@@ -16,6 +16,12 @@ export type ProviderConfig = {
   model: string;
 };
 
+/** A system instruction plus the user content it applies to. */
+export type PromptMessages = {
+  system: string;
+  user: string;
+};
+
 export type ProviderMeta = {
   id: ProviderId;
   label: string;
@@ -102,7 +108,7 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
 
-async function runAnthropic(prompt: string, config: ProviderConfig): Promise<string> {
+async function runAnthropic(messages: PromptMessages, config: ProviderConfig): Promise<string> {
   const response = await fetch(`${config.baseUrl}/messages`, {
     method: 'POST',
     headers: {
@@ -114,7 +120,8 @@ async function runAnthropic(prompt: string, config: ProviderConfig): Promise<str
       model: config.model,
       max_tokens: 2000,
       temperature: 0.2,
-      messages: [{ role: 'user', content: prompt }],
+      system: messages.system,
+      messages: [{ role: 'user', content: messages.user }],
     }),
   });
 
@@ -123,7 +130,10 @@ async function runAnthropic(prompt: string, config: ProviderConfig): Promise<str
   return (content ?? []).map((part) => (part.type === 'text' ? part.text ?? '' : '')).join('');
 }
 
-async function runOpenAICompatible(prompt: string, config: ProviderConfig): Promise<string> {
+async function runOpenAICompatible(
+  messages: PromptMessages,
+  config: ProviderConfig,
+): Promise<string> {
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -134,7 +144,10 @@ async function runOpenAICompatible(prompt: string, config: ProviderConfig): Prom
       model: config.model,
       max_tokens: 2000,
       temperature: 0.2,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [
+        { role: 'system', content: messages.system },
+        { role: 'user', content: messages.user },
+      ],
     }),
   });
 
@@ -143,7 +156,7 @@ async function runOpenAICompatible(prompt: string, config: ProviderConfig): Prom
   return choices?.[0]?.message?.content ?? '';
 }
 
-async function runGemini(prompt: string, config: ProviderConfig): Promise<string> {
+async function runGemini(messages: PromptMessages, config: ProviderConfig): Promise<string> {
   const url = `${config.baseUrl}/models/${config.model}:generateContent?key=${encodeURIComponent(
     config.apiKey,
   )}`;
@@ -152,7 +165,8 @@ async function runGemini(prompt: string, config: ProviderConfig): Promise<string
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      systemInstruction: { parts: [{ text: messages.system }] },
+      contents: [{ role: 'user', parts: [{ text: messages.user }] }],
       generationConfig: {
         temperature: 0.2,
         maxOutputTokens: 2000,
@@ -169,8 +183,8 @@ async function runGemini(prompt: string, config: ProviderConfig): Promise<string
 }
 
 /** Run the prompt through a provider and return the raw text response. */
-export async function runProvider(prompt: string, config: ProviderConfig): Promise<string> {
-  if (config.id === 'gemini') return runGemini(prompt, config);
-  if (config.id === 'anthropic') return runAnthropic(prompt, config);
-  return runOpenAICompatible(prompt, config);
+export async function runProvider(messages: PromptMessages, config: ProviderConfig): Promise<string> {
+  if (config.id === 'gemini') return runGemini(messages, config);
+  if (config.id === 'anthropic') return runAnthropic(messages, config);
+  return runOpenAICompatible(messages, config);
 }

@@ -1,12 +1,12 @@
 /**
- * Shared prompt construction and response parsing for the Wellbeing Insights
- * feature.
+ * Shared response parsing and validation for the Wellbeing Insights feature.
  *
- * Isomorphic and secret-free, so both the client BYOK path and the server route
- * use the same logic and cannot drift apart.
+ * Isomorphic and secret-free, so both the client BYOK path and a self-hosted
+ * proxy use the same logic and cannot drift apart. Prompt construction lives in
+ * insights-prompt.ts.
  */
 
-import type { InsightMoodLabel, InsightTheme, Note, WellbeingInsight } from './insights-types';
+import type { InsightMoodLabel, InsightTheme, WellbeingInsight } from './insights-types';
 
 /** Guardrails so a huge journal can't blow past the model's context/cost. */
 export const MAX_NOTES = 200;
@@ -90,36 +90,4 @@ export function normalizeInsight(
     model,
     generatedAt: Date.now(),
   };
-}
-
-/** Build the analysis prompt from a list of notes. */
-export function buildPrompt(notes: Note[]): string {
-  const body = notes
-    .slice()
-    .sort((a, b) => a.createdAt - b.createdAt)
-    .map((note) => {
-      const date = new Date(note.createdAt).toISOString().slice(0, 10);
-      return `- [${date}] ${note.text.replace(/\s+/g, ' ').trim()}`;
-    })
-    .join('\n')
-    .slice(0, MAX_TOTAL_CHARS);
-
-  return [
-    "You are a careful, supportive wellbeing assistant. You are given a person's private journal notes.",
-    'Identify recurring themes and patterns relevant to their wellbeing. Be gentle and non-diagnostic:',
-    'you are surfacing patterns, never giving medical advice.',
-    '',
-    'Return ONLY a single minified JSON object (no markdown, no prose) with this exact shape:',
-    '{',
-    '  "summary": string,                       // 1-3 sentences, warm and neutral',
-    '  "mood": { "label": "positive"|"neutral"|"mixed"|"low", "score": number, "rationale": string },',
-    '  "themes": [{ "label": string, "count": number, "examples": string[] }],  // max 8',
-    '  "positivePatterns": string[],',
-    '  "concerns": string[],                     // supportive, not alarming',
-    '  "suggestions": string[]                   // practical, optional self-care ideas',
-    '}',
-    '',
-    'NOTES:',
-    body,
-  ].join('\n');
 }

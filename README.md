@@ -77,13 +77,34 @@ surface recurring themes and patterns relevant to your wellbeing.
      shipping a key. The repo does **not** bundle an on-device route for this — see
      *Using a hosted proxy* below for why.
 
-- The provider metadata (`src/lib/ai-providers.ts`) and the prompt/response logic
-  (`src/lib/insights-core.ts`) are isomorphic and shared by both modes, so they cannot
-  drift apart.
+- The provider metadata (`src/lib/ai-providers.ts`), the prompt/persona
+  (`src/lib/insights-prompt.ts`) and the response parsing (`src/lib/insights-core.ts`) are
+  isomorphic and shared by both modes, so they cannot drift apart.
 
 > **Privacy note on BYOK:** since it is your own key, nothing of yours is exposed to
 > anyone else. The key sits on your device in encrypted storage — it is only as safe as
 > the device itself. For a free, no-billing key that is an acceptable trade.
+
+### Customizing how the AI responds
+
+The Insights tab has an **Instructions to the AI** card. Tap **Edit** to change the
+persona — the wording that tells the model how to read your notes, what to focus on, and
+the tone to use. It is stored on-device (`AsyncStorage`, key `kerodi.ai.instructions.v1`)
+and applies to the next **Generate insights**. **Reset to default** restores the bundled
+persona.
+
+What is editable and what is fixed:
+
+| Editable | Fixed (added automatically) |
+| --- | --- |
+| The persona: tone, focus, format of the prose | The JSON output contract, so parsing never breaks |
+| — | The notes themselves, oldest first |
+
+The bundled default is `DEFAULT_INSTRUCTIONS` in `src/lib/insights-prompt.ts`. The
+required JSON shape (`OUTPUT_CONTRACT`) is appended automatically by `buildSystemPrompt()`,
+so editing the persona can never break the app. The persona is sent as a proper **system**
+message (Anthropic `system`, Gemini `systemInstruction`, OpenAI-compatible
+`role: "system"`), with your notes as the user message.
 
 ### Choosing an AI provider
 

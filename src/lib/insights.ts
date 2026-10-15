@@ -20,7 +20,8 @@ import {
   type ProviderConfig,
   type ProviderId,
 } from './ai-providers';
-import { MAX_NOTES, buildPrompt, extractJson, normalizeInsight } from './insights-core';
+import { MAX_NOTES, extractJson, normalizeInsight } from './insights-core';
+import { buildSystemPrompt, buildUserPrompt } from './insights-prompt';
 import type { Note, WellbeingInsight } from './insights-types';
 
 export type { InsightMoodLabel, InsightTheme, Note, WellbeingInsight } from './insights-types';
@@ -48,14 +49,19 @@ function toError(status: number, body: unknown): Error {
 
 /**
  * Analyse notes through the hosted proxy. The key lives on the server, so
- * nothing secret is needed here.
+ * nothing secret is needed here. `instructions` is forwarded so a compatible
+ * server can honour the user's custom persona.
  */
-export async function analyzeNotes(notes: Note[]): Promise<WellbeingInsight> {
+export async function analyzeNotes(
+  notes: Note[],
+  instructions?: string | null,
+): Promise<WellbeingInsight> {
   const response = await fetch(insightsEndpoint(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       notes: notes.map(({ id, text, createdAt }) => ({ id, text, createdAt })),
+      instructions: instructions?.trim() || undefined,
     }),
   });
 
@@ -80,6 +86,7 @@ export async function analyzeNotesDirect(
   notes: Note[],
   apiKey: string,
   providerId?: ProviderId | null,
+  instructions?: string | null,
 ): Promise<WellbeingInsight> {
   const id = providerId ?? detectProviderFromKey(apiKey) ?? 'groq';
   const meta = PROVIDERS[id];
@@ -98,7 +105,10 @@ export async function analyzeNotesDirect(
     throw new Error('No notes to analyse.');
   }
 
-  const text = await runProvider(buildPrompt(usable), config);
+  const text = await runProvider(
+    { system: buildSystemPrompt(instructions), user: buildUserPrompt(usable) },
+    config,
+  );
   const insight = normalizeInsight(extractJson(text), usable.length, id, meta.model);
   if (!insight) {
     throw new Error('The AI returned an unexpected response format.');
