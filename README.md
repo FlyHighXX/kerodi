@@ -55,6 +55,130 @@ Join our community of developers creating universal apps.
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
 
+## Wellbeing Insights (AI)
+
+The **Insights** tab reads the notes you have written locally and asks an AI model to
+surface recurring themes and patterns relevant to your wellbeing.
+
+### How it works
+
+- Notes are stored on-device (`AsyncStorage`, key `kerodi.notes.v1`) by the Notes tab.
+- Nothing is sent anywhere until you open Insights and explicitly enable it (a one-time
+  opt-in is stored under `kerodi.ai.consent.v1`), then tap **Generate insights**.
+- Analysis can run in one of two modes:
+
+  1. **Bring your own key (BYOK) — no server needed.** You paste your own provider
+     API key into the Insights tab. It is stored in `expo-secure-store` (Android
+     Keystore / iOS Keychain) and sent **only** to the provider you chose, directly from
+     the device. No hosting, works from any network.
+  2. **Hosted proxy (optional) — the key stays server-side.** If no key is stored on the
+     device, the notes are `POST`ed to an endpoint you host yourself, set via
+     `EXPO_PUBLIC_INSIGHTS_API_URL`. This lets one build serve several people without
+     shipping a key. The repo does **not** bundle an on-device route for this — see
+     *Using a hosted proxy* below for why.
+
+- The provider metadata (`src/lib/ai-providers.ts`), the prompt/persona
+  (`src/lib/insights-prompt.ts`) and the response parsing (`src/lib/insights-core.ts`) are
+  isomorphic and shared by both modes, so they cannot drift apart.
+
+> **Privacy note on BYOK:** since it is your own key, nothing of yours is exposed to
+> anyone else. The key sits on your device in encrypted storage — it is only as safe as
+> the device itself. For a free, no-billing key that is an acceptable trade.
+
+### Customizing how the AI responds
+
+The Insights tab has an **Instructions to the AI** card. Tap **Edit** to change the
+persona — the wording that tells the model how to read your notes, what to focus on, and
+the tone to use. It is stored on-device (`AsyncStorage`, key `kerodi.ai.instructions.v1`)
+and applies to the next **Generate insights**. **Reset to default** restores the bundled
+persona.
+
+What is editable and what is fixed:
+
+| Editable | Fixed (added automatically) |
+| --- | --- |
+| The persona: tone, focus, format of the prose | The JSON output contract, so parsing never breaks |
+| — | The notes themselves, oldest first |
+
+The bundled default is `DEFAULT_INSTRUCTIONS` in `src/lib/insights-prompt.ts`. The
+required JSON shape (`OUTPUT_CONTRACT`) is appended automatically by `buildSystemPrompt()`,
+so editing the persona can never break the app. The persona is sent as a proper **system**
+message (Anthropic `system`, Gemini `systemInstruction`, OpenAI-compatible
+`role: "system"`), with your notes as the user message.
+
+### Choosing an AI provider
+
+Both modes are provider-agnostic. In BYOK mode the provider is detected from the key
+prefix (Groq keys start with `gsk_`, Gemini with `AIza`, …) and can be overridden in
+the UI. In proxy mode, set a key for one provider; it is auto-detected
+(order: `groq`, `gemini`, `openai`, `anthropic`), or set `INSIGHTS_PROVIDER` to
+pick explicitly.
+
+| Provider | Free tier | Trains/retains on your data? | Default model |
+| --- | --- | --- | --- |
+| `groq` (recommended) | yes | No by default; Zero Data Retention available | `openai/gpt-oss-120b` |
+| `gemini` | yes | Free tier may use data to improve Google products | `gemini-3.8-flash` |
+| `openai` | no | No | `gpt-4o-mini` |
+| `anthropic` | no | No | `claude-sonnet-5` |
+
+Because these notes are sensitive, `groq` is the default recommendation: it is
+free and does not retain inference data by default. `openai` also works with any
+OpenAI-compatible endpoint (OpenRouter, Cerebras, a local Ollama server) via
+`INSIGHTS_BASE_URL`.
+
+### Configuration
+
+**BYOK needs no configuration at all** — just paste a key in the app. The only
+client-side setting is the optional proxy URL:
+
+| Variable | Where | Required | Purpose |
+| --- | --- | --- | --- |
+| `EXPO_PUBLIC_INSIGHTS_API_URL` | client | no | Absolute URL of your own proxy endpoint. Only used when no key is stored on the device. |
+
+`app.json` keeps `web.output: "static"`. We deliberately do **not** use `"server"`:
+enabling it makes Expo bundle the router server manifest, which pulls in the
+`lightningcss` native addon — and the Termux/Android build host cannot load it
+(linker namespace restriction), which fails the release bundle.
+
+### Local testing
+
+BYOK runs entirely on the device, so there is no endpoint to curl. Use the usual checks,
+then install a build and paste a key in the Insights tab:
+
+```bash
+npx tsc --noEmit
+npx expo lint
+npx expo export -p web   # verifies the app bundles
+```
+
+### Using a hosted proxy (optional)
+
+**Skip this entirely if you use BYOK** — with a key saved in the app, the native build
+talks to the provider directly and needs no server.
+
+Proxy mode is for when you want to keep the key server-side (for example, to share one
+build without shipping a key). To use it, host your own endpoint that accepts
+`{ notes: [...] }` and returns a `WellbeingInsight` (see `src/lib/insights-types.ts`),
+then set `EXPO_PUBLIC_INSIGHTS_API_URL` before building. The shared, secret-free modules
+(`src/lib/insights-core.ts`, `src/lib/ai-providers.ts`) can be reused in that server.
+
+The repo intentionally ships **no** on-device route. An earlier revision had one at
+`src/app/api/insights+api.ts`, which required `web.output: "server"`. That makes Expo
+bundle the router **server manifest**, which imports web CSS and therefore the
+`lightningcss` native addon — and the Termux/Android build host cannot `dlopen` it
+(linker namespace restriction), failing `createBundleReleaseJsAndAssets`. Keeping
+`web.output: "static"` is what makes the Android release build succeed there.
+
+Native release builds with no key saved and no proxy URL will show a "Could not
+generate" error at runtime.
+
+### Privacy
+
+Enabling Insights sends your note text to the AI provider you chose. It is off by
+default and can be turned off at any time from the tab. In BYOK mode the key and the
+notes go only to that provider, straight from your device. The rest of the app keeps its
+notes on-device.
+
 ## CI / builds
 
 The Android APK is built automatically on the on-device Jenkins worker when a pull request is merged into `main`. PR branches can also be built on demand from Jenkins using the `BRANCH` build parameter.

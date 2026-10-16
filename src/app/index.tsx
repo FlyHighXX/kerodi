@@ -24,7 +24,8 @@ export default function HomeScreen() {
           </ThemedText>
           <ThemedText style={styles.cardText}>
             KeRoDi is your simple companion for capturing ideas, reminders, and everyday thoughts.
-            Open the Notes tab to start writing — everything you save stays on your device.
+            Open the Notes tab to start writing — everything you save stays on your device. If you
+            want, the Insights tab can use AI to look for patterns across your notes.
           </ThemedText>
         </ThemedView>
 
