@@ -8,7 +8,8 @@
     "scheme": "kerodi",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.flyhighxx.kerodi"
     },
     "android": {
       "adaptiveIcon": {
