@@ -43,3 +43,6 @@ example
 # generated native folders
 /ios
 /android
+
+# Freerider push worker state
+.freerider-seen.json

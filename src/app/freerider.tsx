@@ -34,6 +34,13 @@ import {
   type RouteOffer,
 } from '@/lib/freerider';
 import {
+  FREERIDER_PUSH_ENDPOINT,
+  readStoredFreeriderPushToken,
+  registerFreeriderPushToken,
+  syncFreeriderPushPreferences,
+  uploadFreeriderPushPreferences,
+} from '@/lib/freerider-push';
+import {
   readLocationFilters,
   readPollSeconds,
   writeLocationFilters,
@@ -65,6 +72,7 @@ export default function FreeriderScreen() {
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [alertsBusy, setAlertsBusy] = useState(false);
   const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [pushToken, setPushToken] = useState<string | null>(null);
 
   const {
     routes,
@@ -138,6 +146,31 @@ export default function FreeriderScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    readStoredFreeriderPushToken()
+      .then((token) => {
+        if (!active || !token) return;
+        setPushToken(token);
+        if (FREERIDER_PUSH_ENDPOINT) void syncFreeriderPushPreferences();
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Keep the worker's filters in sync with the saved From/To search.
+  useEffect(() => {
+    if (!alertsEnabled || !pushToken || !FREERIDER_PUSH_ENDPOINT) return;
+    const timer = setTimeout(() => {
+      void uploadFreeriderPushPreferences(pushToken).then((ok) => {
+        setAlertsError(ok ? null : 'Could not reach the push worker. Check its URL.');
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [alertsEnabled, fromQuery, pushToken, toQuery]);
+
   const toggleAlerts = useCallback(async () => {
     if (alertsBusy || Platform.OS === 'web') return;
     setAlertsBusy(true);
@@ -153,6 +186,18 @@ export default function FreeriderScreen() {
           setAlertsError(
             'Allow notifications and background activity for Kerodi in system settings, then try again.',
           );
+          return;
+        }
+
+        try {
+          const token = await registerFreeriderPushToken();
+          setPushToken(token);
+          if (token && FREERIDER_PUSH_ENDPOINT) {
+            const ok = await uploadFreeriderPushPreferences(token);
+            setAlertsError(ok ? null : 'Push alerts enabled, but the worker could not be reached.');
+          }
+        } catch {
+          setAlertsError('Push alerts enabled, but this device could not register a token.');
         }
       }
     } catch {
@@ -272,9 +317,21 @@ export default function FreeriderScreen() {
             <ThemedText type="smallBold">New-route alerts</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               {alertsEnabled
-                ? `Background checks follow your From/To search (about every ${BACKGROUND_MIN_INTERVAL_MINUTES} min, OS permitting).`
+                ? FREERIDER_PUSH_ENDPOINT
+                  ? 'Fast push alerts follow your From/To search. A slow background check is kept as a fallback.'
+                  : `Background checks follow your From/To search (about every ${BACKGROUND_MIN_INTERVAL_MINUTES} min). Add a worker URL for second-level push alerts.`
                 : 'Get a notification when a new route matches your From/To search.'}
             </ThemedText>
+            {alertsEnabled && pushToken && !FREERIDER_PUSH_ENDPOINT ? (
+              <View style={styles.tokenBlock}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Push token for the worker:
+                </ThemedText>
+                <ThemedText type="code" selectable>
+                  {pushToken}
+                </ThemedText>
+              </View>
+            ) : null}
             {alertsError ? (
               <ThemedText type="small" themeColor="textSecondary">
                 {alertsError}
@@ -600,6 +657,9 @@ const styles = StyleSheet.create({
   },
   notificationCopy: {
     flex: 1,
+    gap: Spacing.half,
+  },
+  tokenBlock: {
     gap: Spacing.half,
   },
   chipRow: {
