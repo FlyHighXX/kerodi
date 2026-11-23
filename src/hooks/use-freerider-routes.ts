@@ -4,10 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import {
-  buildRoutePairs,
+  fetchFreeriderLocations,
   fetchFreeriderRoutes,
+  type FreerideLocation,
   type RouteOffer,
-  type RoutePair,
 } from '@/lib/freerider';
 
 const SEEN_KEY = 'kerodi.freerider.seen.v1';
@@ -30,7 +30,7 @@ export function useFreeriderRoutes({
 }: Options = {}) {
   const intervalMs = Math.max(MIN_POLL_MS, pollIntervalMs);
   const [routes, setRoutes] = useState<RouteOffer[]>([]);
-  const [pairs, setPairs] = useState<RoutePair[]>([]);
+  const [locations, setLocations] = useState<FreerideLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +64,24 @@ export function useFreeriderRoutes({
     };
   }, []);
 
+  // The full store list powers from/to suggestions even for places with no
+  // active route right now. It only needs loading once per mount.
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+
+    fetchFreeriderLocations(controller.signal)
+      .then((list) => {
+        if (active) setLocations(list);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
+
   const refresh = useCallback(
     async (options?: { force?: boolean }) => {
       // Use the shorter of the feed's stale window and the chosen poll interval,
@@ -87,9 +105,11 @@ export function useFreeriderRoutes({
 
         seenRef.current = new Set(next.map((route) => route.id));
         setRoutes(next);
-        setPairs(buildRoutePairs(next));
+        // Prepend so `newIds` doubles as a newest-first discovery order for the UI.
+        const appearedIds = appeared.map((route) => route.id);
         setNewIds((current) => [
-          ...new Set([...current, ...appeared.map((route) => route.id)]),
+          ...appearedIds,
+          ...current.filter((id) => !appearedIds.includes(id)),
         ]);
 
         const now = Date.now();
@@ -141,7 +161,7 @@ export function useFreeriderRoutes({
 
   return {
     routes,
-    pairs,
+    locations,
     loading,
     refreshing,
     error,

@@ -13,21 +13,23 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ExternalLink } from '@/components/external-link';
+import { FreeriderRouteLink } from '@/components/freerider-route-link';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { DEFAULT_POLL_SECONDS, useFreeriderRoutes } from '@/hooks/use-freerider-routes';
 import {
-  FREERIDER_SITE_URL,
+  buildFreeriderRouteUrl,
   filterRoutes,
   formatDuration,
   formatLocalDateTime,
+  matchesLocationQuery,
+  type FreerideLocation,
   type RouteOffer,
 } from '@/lib/freerider';
 
-const FILTERS_KEY = 'kerodi.freerider.filters.v1';
+const LOCATION_FILTERS_KEY = 'kerodi.freerider.location-filters.v1';
 const POLL_KEY = 'kerodi.freerider.poll-seconds.v1';
 const POLL_PRESETS = [5, 15, 60, 120];
 
@@ -47,15 +49,14 @@ export default function FreeriderScreen() {
   const [pollSeconds, setPollSeconds] = useState(DEFAULT_POLL_SECONDS);
   const [pollDraft, setPollDraft] = useState(String(DEFAULT_POLL_SECONDS));
   const [pollReady, setPollReady] = useState(false);
-  const [selectedPairs, setSelectedPairs] = useState<Set<string>>(new Set());
+  const [fromQuery, setFromQuery] = useState('');
+  const [toQuery, setToQuery] = useState('');
   const [filtersReady, setFiltersReady] = useState(false);
-  const [pairQuery, setPairQuery] = useState('');
-  const [showPairs, setShowPairs] = useState(false);
   const [newOnly, setNewOnly] = useState(false);
 
   const {
     routes,
-    pairs,
+    locations,
     loading,
     refreshing,
     error,
@@ -65,15 +66,17 @@ export default function FreeriderScreen() {
     markAllSeen,
   } = useFreeriderRoutes({ pollIntervalMs: pollSeconds * 1000 });
 
-  // Restore the chosen location pairs once, on mount.
+  // Restore the from/to search once, on mount.
   useEffect(() => {
     let active = true;
-    AsyncStorage.getItem(FILTERS_KEY)
+    AsyncStorage.getItem(LOCATION_FILTERS_KEY)
       .then((raw) => {
         if (!active || !raw) return;
         const parsed: unknown = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          setSelectedPairs(new Set(parsed.filter((key): key is string => typeof key === 'string')));
+        if (parsed && typeof parsed === 'object') {
+          const value = parsed as { from?: unknown; to?: unknown };
+          if (typeof value.from === 'string') setFromQuery(value.from);
+          if (typeof value.to === 'string') setToQuery(value.to);
         }
       })
       .catch(() => {})
@@ -87,8 +90,11 @@ export default function FreeriderScreen() {
 
   useEffect(() => {
     if (!filtersReady) return;
-    AsyncStorage.setItem(FILTERS_KEY, JSON.stringify([...selectedPairs])).catch(() => {});
-  }, [filtersReady, selectedPairs]);
+    AsyncStorage.setItem(
+      LOCATION_FILTERS_KEY,
+      JSON.stringify({ from: fromQuery, to: toQuery }),
+    ).catch(() => {});
+  }, [filtersReady, fromQuery, toQuery]);
 
   // Restore the polling interval once, on mount.
   useEffect(() => {
@@ -135,26 +141,9 @@ export default function FreeriderScreen() {
 
   const newIdSet = useMemo(() => new Set(newIds), [newIds]);
   const filtered = useMemo(
-    () => filterRoutes(routes, selectedPairs, newOnly, newIdSet),
-    [newIdSet, newOnly, routes, selectedPairs],
+    () => filterRoutes(routes, fromQuery, toQuery, newOnly, newIdSet, newIds),
+    [fromQuery, newIdSet, newIds, newOnly, routes, toQuery],
   );
-
-  const visiblePairs = useMemo(() => {
-    const query = pairQuery.trim().toLowerCase();
-    if (!query) return pairs;
-    return pairs.filter((pair) =>
-      `${pair.pickupName} ${pair.returnName} ${pair.country}`.toLowerCase().includes(query),
-    );
-  }, [pairQuery, pairs]);
-
-  const togglePair = useCallback((key: string) => {
-    setSelectedPairs((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
 
   const renderItem = useCallback(
     ({ item }: { item: RouteOffer }) => (
@@ -252,17 +241,30 @@ export default function FreeriderScreen() {
       <ThemedView type="backgroundElement" style={styles.card}>
         <View style={styles.rowBetween}>
           <ThemedText type="smallBold" themeColor="textSecondary">
-            LOCATION PAIRS
+            SEARCH LOCATIONS
           </ThemedText>
-          <Pressable onPress={() => setShowPairs((open) => !open)} hitSlop={8}>
-            <ThemedText type="link">{showPairs ? 'Hide' : 'Choose'}</ThemedText>
-          </Pressable>
+          <ThemedText type="small" themeColor="textSecondary">
+            {locations.length > 0 ? `${locations.length} stores` : 'Loading stores…'}
+          </ThemedText>
         </View>
         <ThemedText type="small" themeColor="textSecondary">
-          {selectedPairs.size === 0
-            ? `All ${pairs.length} pairs`
-            : `${selectedPairs.size} pair${selectedPairs.size === 1 ? '' : 's'} selected`}
+          Type a city or part of a name. “Stockholm” matches every Stockholm store.
         </ThemedText>
+
+        <LocationField
+          label="FROM"
+          value={fromQuery}
+          onChangeValue={setFromQuery}
+          locations={locations}
+          placeholder="e.g. Stockholm"
+        />
+        <LocationField
+          label="TO"
+          value={toQuery}
+          onChangeValue={setToQuery}
+          locations={locations}
+          placeholder="e.g. Göteborg"
+        />
 
         <View style={styles.chipRow}>
           <Pressable
@@ -276,55 +278,17 @@ export default function FreeriderScreen() {
               New only
             </ThemedText>
           </Pressable>
-          {selectedPairs.size > 0 ? (
-            <Pressable onPress={() => setSelectedPairs(new Set())} hitSlop={8}>
-              <ThemedText type="link">Clear pairs</ThemedText>
+          {fromQuery.length > 0 || toQuery.length > 0 ? (
+            <Pressable
+              onPress={() => {
+                setFromQuery('');
+                setToQuery('');
+              }}
+              hitSlop={8}>
+              <ThemedText type="link">Clear places</ThemedText>
             </Pressable>
           ) : null}
         </View>
-
-        {showPairs ? (
-          <>
-            <TextInput
-              value={pairQuery}
-              onChangeText={setPairQuery}
-              placeholder="Search pickup or return location"
-              placeholderTextColor={theme.textSecondary}
-              autoCorrect={false}
-              style={[styles.searchInput, { backgroundColor: theme.background, color: theme.text }]}
-            />
-            <ScrollView style={styles.pairList} nestedScrollEnabled showsVerticalScrollIndicator>
-              {visiblePairs.map((pair) => {
-                const selected = selectedPairs.has(pair.key);
-                return (
-                  <Pressable
-                    key={pair.key}
-                    onPress={() => togglePair(pair.key)}
-                    style={({ pressed }) => [
-                      styles.pairRow,
-                      { backgroundColor: selected ? theme.backgroundSelected : theme.background },
-                      pressed && styles.pressed,
-                    ]}>
-                    <ThemedText type="small" style={styles.pairCheck}>
-                      {selected ? '✓' : ''}
-                    </ThemedText>
-                    <ThemedText type="small" style={styles.pairLabel}>
-                      {pair.pickupName} → {pair.returnName}
-                    </ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {pair.count}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-              {visiblePairs.length === 0 ? (
-                <ThemedText type="small" themeColor="textSecondary" style={styles.noPairs}>
-                  No matching location pairs.
-                </ThemedText>
-              ) : null}
-            </ScrollView>
-          </>
-        ) : null}
       </ThemedView>
 
       <View style={styles.rowBetween}>
@@ -377,6 +341,85 @@ export default function FreeriderScreen() {
   );
 }
 
+type LocationFieldProps = {
+  label: string;
+  value: string;
+  onChangeValue: (value: string) => void;
+  locations: FreerideLocation[];
+  placeholder: string;
+};
+
+function LocationField({
+  label,
+  value,
+  onChangeValue,
+  locations,
+  placeholder,
+}: LocationFieldProps) {
+  const theme = useTheme();
+  const [showAll, setShowAll] = useState(false);
+
+  const { suggestions, totalMatches } = useMemo(() => {
+    const matches = value.trim()
+      ? locations.filter((location) => matchesLocationQuery(location, value))
+      : locations;
+    return {
+      totalMatches: matches.length,
+      suggestions:
+        !value.trim() && !showAll ? [] : showAll ? matches : matches.slice(0, 10),
+    };
+  }, [locations, showAll, value]);
+
+  return (
+    <View style={styles.locationField}>
+      <ThemedText type="smallBold" themeColor="textSecondary">
+        {label}
+      </ThemedText>
+      <TextInput
+        value={value}
+        onChangeText={onChangeValue}
+        placeholder={placeholder}
+        placeholderTextColor={theme.textSecondary}
+        autoCorrect={false}
+        autoCapitalize="none"
+        style={[styles.searchInput, { backgroundColor: theme.background, color: theme.text }]}
+      />
+
+      {suggestions.length > 0 ? (
+        <ScrollView style={styles.suggestionList} nestedScrollEnabled showsVerticalScrollIndicator>
+          {suggestions.map((location) => (
+            <Pressable
+              key={location.tracCode}
+              onPress={() => {
+                onChangeValue(location.name);
+                setShowAll(false);
+              }}
+              style={({ pressed }) => [
+                styles.suggestionRow,
+                pressed && styles.pressed,
+              ]}>
+              <ThemedText type="small" style={styles.suggestionName}>
+                {location.name}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {[location.city, location.country?.toUpperCase()].filter(Boolean).join(', ')}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
+
+      {totalMatches > 10 || showAll ? (
+        <Pressable onPress={() => setShowAll((current) => !current)} hitSlop={8}>
+          <ThemedText type="link">
+            {showAll ? 'Show fewer' : `Show all ${totalMatches} stores`}
+          </ThemedText>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function RouteCard({ route, isNew }: { route: RouteOffer; isNew: boolean }) {
   return (
     <ThemedView type="backgroundElement" style={styles.routeCard}>
@@ -414,9 +457,9 @@ function RouteCard({ route, isNew }: { route: RouteOffer; isNew: boolean }) {
         Return by {formatLocalDateTime(route.latestReturn)}
       </ThemedText>
 
-      <ExternalLink href={FREERIDER_SITE_URL} style={styles.siteLink}>
-        <ThemedText type="linkPrimary">Open on hertzfreerider.se</ThemedText>
-      </ExternalLink>
+      <FreeriderRouteLink url={buildFreeriderRouteUrl(route)} style={styles.siteLink}>
+        <ThemedText type="linkPrimary">Open route on hertzfreerider.se</ThemedText>
+      </FreeriderRouteLink>
     </ThemedView>
   );
 }
@@ -499,25 +542,23 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     fontSize: 15,
   },
-  pairList: {
-    maxHeight: 220,
+  locationField: {
+    gap: Spacing.one,
   },
-  pairRow: {
+  suggestionList: {
+    maxHeight: 180,
+  },
+  suggestionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: Spacing.two,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.two,
     borderRadius: Spacing.two,
   },
-  pairCheck: {
-    width: 16,
-  },
-  pairLabel: {
+  suggestionName: {
     flex: 1,
-  },
-  noPairs: {
-    paddingVertical: Spacing.two,
   },
   routeCard: {
     gap: Spacing.one,
