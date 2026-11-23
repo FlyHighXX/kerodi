@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
@@ -9,8 +8,8 @@ import {
   type FreerideLocation,
   type RouteOffer,
 } from '@/lib/freerider';
+import { readSeenRouteIds, writeSeenRouteIds } from '@/lib/freerider-storage';
 
-const SEEN_KEY = 'kerodi.freerider.seen.v1';
 export const DEFAULT_POLL_SECONDS = 120;
 const MIN_POLL_MS = 1000;
 const STALE_AFTER_MS = 30 * 1000;
@@ -46,13 +45,10 @@ export function useFreeriderRoutes({
   useEffect(() => {
     let active = true;
 
-    AsyncStorage.getItem(SEEN_KEY)
-      .then((raw) => {
-        if (!active || !raw) return;
-        const parsed: unknown = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          seenRef.current = new Set(parsed.filter((id): id is number => typeof id === 'number'));
-        }
+    readSeenRouteIds()
+      .then((ids) => {
+        if (!active) return;
+        seenRef.current = ids;
       })
       .catch(() => {})
       .finally(() => {
@@ -115,7 +111,7 @@ export function useFreeriderRoutes({
         const now = Date.now();
         lastUpdatedRef.current = now;
         setLastUpdated(now);
-        AsyncStorage.setItem(SEEN_KEY, JSON.stringify([...seenRef.current])).catch(() => {});
+        void writeSeenRouteIds(seenRef.current);
       } catch (cause) {
         setError(
           controller.signal.aborted
@@ -137,7 +133,7 @@ export function useFreeriderRoutes({
   const markAllSeen = useCallback(() => {
     seenRef.current = new Set(routes.map((route) => route.id));
     setNewIds([]);
-    AsyncStorage.setItem(SEEN_KEY, JSON.stringify([...seenRef.current])).catch(() => {});
+    void writeSeenRouteIds(seenRef.current);
   }, [routes]);
 
   // Refresh on focus, then poll while the tab stays in the foreground.

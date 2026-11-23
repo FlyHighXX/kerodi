@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -20,6 +19,12 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { DEFAULT_POLL_SECONDS, useFreeriderRoutes } from '@/hooks/use-freerider-routes';
 import {
+  BACKGROUND_MIN_INTERVAL_MINUTES,
+  disableFreeriderNotifications,
+  enableFreeriderNotifications,
+  syncFreeriderNotificationState,
+} from '@/lib/freerider-background-task';
+import {
   buildFreeriderRouteUrl,
   filterRoutes,
   formatDuration,
@@ -28,9 +33,13 @@ import {
   type FreerideLocation,
   type RouteOffer,
 } from '@/lib/freerider';
+import {
+  readLocationFilters,
+  readPollSeconds,
+  writeLocationFilters,
+  writePollSeconds,
+} from '@/lib/freerider-storage';
 
-const LOCATION_FILTERS_KEY = 'kerodi.freerider.location-filters.v1';
-const POLL_KEY = 'kerodi.freerider.poll-seconds.v1';
 const POLL_PRESETS = [5, 15, 60, 120];
 
 function clampPollSeconds(value: number) {
@@ -53,6 +62,9 @@ export default function FreeriderScreen() {
   const [toQuery, setToQuery] = useState('');
   const [filtersReady, setFiltersReady] = useState(false);
   const [newOnly, setNewOnly] = useState(false);
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
+  const [alertsBusy, setAlertsBusy] = useState(false);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
 
   const {
     routes,
@@ -66,18 +78,15 @@ export default function FreeriderScreen() {
     markAllSeen,
   } = useFreeriderRoutes({ pollIntervalMs: pollSeconds * 1000 });
 
-  // Restore the from/to search once, on mount.
+  // Restore the from/to search once, on mount. The background task reads the
+  // same keys so notifications follow these filters.
   useEffect(() => {
     let active = true;
-    AsyncStorage.getItem(LOCATION_FILTERS_KEY)
-      .then((raw) => {
-        if (!active || !raw) return;
-        const parsed: unknown = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-          const value = parsed as { from?: unknown; to?: unknown };
-          if (typeof value.from === 'string') setFromQuery(value.from);
-          if (typeof value.to === 'string') setToQuery(value.to);
-        }
+    readLocationFilters()
+      .then((filters) => {
+        if (!active) return;
+        setFromQuery(filters.from);
+        setToQuery(filters.to);
       })
       .catch(() => {})
       .finally(() => {
@@ -90,24 +99,18 @@ export default function FreeriderScreen() {
 
   useEffect(() => {
     if (!filtersReady) return;
-    AsyncStorage.setItem(
-      LOCATION_FILTERS_KEY,
-      JSON.stringify({ from: fromQuery, to: toQuery }),
-    ).catch(() => {});
+    void writeLocationFilters({ from: fromQuery, to: toQuery });
   }, [filtersReady, fromQuery, toQuery]);
 
   // Restore the polling interval once, on mount.
   useEffect(() => {
     let active = true;
-    AsyncStorage.getItem(POLL_KEY)
-      .then((raw) => {
-        if (!active || !raw) return;
-        const value = Number(raw);
-        if (Number.isFinite(value) && value > 0) {
-          const seconds = clampPollSeconds(value);
-          setPollSeconds(seconds);
-          setPollDraft(String(seconds));
-        }
+    readPollSeconds()
+      .then((value) => {
+        if (!active || value === null) return;
+        const seconds = clampPollSeconds(value);
+        setPollSeconds(seconds);
+        setPollDraft(String(seconds));
       })
       .catch(() => {})
       .finally(() => {
@@ -120,8 +123,44 @@ export default function FreeriderScreen() {
 
   useEffect(() => {
     if (!pollReady) return;
-    AsyncStorage.setItem(POLL_KEY, String(pollSeconds)).catch(() => {});
+    void writePollSeconds(pollSeconds);
   }, [pollReady, pollSeconds]);
+
+  useEffect(() => {
+    let active = true;
+    syncFreeriderNotificationState()
+      .then((enabled) => {
+        if (active) setAlertsEnabled(enabled);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const toggleAlerts = useCallback(async () => {
+    if (alertsBusy || Platform.OS === 'web') return;
+    setAlertsBusy(true);
+    setAlertsError(null);
+    try {
+      if (alertsEnabled) {
+        await disableFreeriderNotifications();
+        setAlertsEnabled(false);
+      } else {
+        const enabled = await enableFreeriderNotifications();
+        setAlertsEnabled(enabled);
+        if (!enabled) {
+          setAlertsError(
+            'Allow notifications and background activity for Kerodi in system settings, then try again.',
+          );
+        }
+      }
+    } catch {
+      setAlertsError('Could not change notification settings on this device.');
+    } finally {
+      setAlertsBusy(false);
+    }
+  }, [alertsBusy, alertsEnabled]);
 
   const commitPollDraft = useCallback(() => {
     const value = Number(pollDraft);
@@ -227,6 +266,34 @@ export default function FreeriderScreen() {
               </ThemedText>
             </Pressable>
           ) : null}
+        </View>
+        <View style={styles.notificationRow}>
+          <View style={styles.notificationCopy}>
+            <ThemedText type="smallBold">New-route alerts</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {alertsEnabled
+                ? `Background checks follow your From/To search (about every ${BACKGROUND_MIN_INTERVAL_MINUTES} min, OS permitting).`
+                : 'Get a notification when a new route matches your From/To search.'}
+            </ThemedText>
+            {alertsError ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {alertsError}
+              </ThemedText>
+            ) : null}
+          </View>
+          <Pressable
+            onPress={() => void toggleAlerts()}
+            disabled={alertsBusy || Platform.OS === 'web'}
+            style={({ pressed }) => [
+              styles.button,
+              { backgroundColor: theme.backgroundSelected },
+              (alertsBusy || Platform.OS === 'web') && styles.disabled,
+              pressed && styles.pressed,
+            ]}>
+            <ThemedText type="smallBold">
+              {alertsBusy ? '…' : alertsEnabled ? 'Turn off' : 'Turn on'}
+            </ThemedText>
+          </Pressable>
         </View>
         {error ? (
           <ThemedText type="small" themeColor="textSecondary">
@@ -525,6 +592,15 @@ const styles = StyleSheet.create({
   },
   markSeen: {
     paddingVertical: Spacing.one,
+  },
+  notificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  notificationCopy: {
+    flex: 1,
+    gap: Spacing.half,
   },
   chipRow: {
     flexDirection: 'row',

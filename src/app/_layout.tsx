@@ -4,6 +4,8 @@ import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
+// Registers the Freerider background task at app start, before any tab mounts.
+import '@/lib/freerider-background-task';
 
 SplashScreen.preventAutoHideAsync();
 
