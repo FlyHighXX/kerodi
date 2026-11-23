@@ -35,6 +35,11 @@ export default function AppTabs() {
           renderingMode="template"
         />
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="freerider">
+        <NativeTabs.Trigger.Label>Freerider</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="car.fill" md="directions_car" />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
