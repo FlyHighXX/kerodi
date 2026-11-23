@@ -11,7 +11,7 @@ In the app, open the **Freerider** tab and turn on **New-route alerts**. With no
 ## 2. Run the worker
 
 ```bash
-EXPO_PUSH_TOKEN="ExpoPushToken[...]" \
+EXPO_PUSH_TOKEN="ExponentPushToken[...]" \
 FROM="Stockholm" \
 TO="Göteborg" \
 POLL_SECONDS=10 \
