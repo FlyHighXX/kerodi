@@ -44,10 +44,11 @@ A route that disappears and later returns sends **Freerider route available agai
 
 The worker address is saved on the device in **Settings → Worker connection**. There is no baked-in LAN address, because private addresses depend on the network the phone is on. A build-time `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT` is used only as the initial value if one was provided.
 
-Use the address of the machine running the worker, for example:
+Use the Tailscale address of the machine running the worker. In this setup, the worker and Jenkins share one host:
 
 ```text
-http://192.168.1.171:8787
+Worker: http://100.77.0.70:8787
+Jenkins: http://100.77.0.70:8080
 ```
 
 Use `Test` in Settings to check the connection. Saved addresses work across builds; switching from a LAN address to a VPN or public address does not require a rebuild. Android cleartext traffic is enabled through `expo-build-properties` so plain HTTP to the worker is allowed.
