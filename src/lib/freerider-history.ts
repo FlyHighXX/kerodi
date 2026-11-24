@@ -308,6 +308,12 @@ export function formatHistoryClock(timestamp: number | null | undefined) {
   });
 }
 
+/** Baseline rows existed at first launch, so their detection time is unknown. */
+export function formatDetectionText(record: RouteHistoryRecord) {
+  if (record.countsTowardPatterns === false) return 'Baseline · time unknown';
+  return `Detected ${formatHistoryClock(record.discoveredAt)}`;
+}
+
 export function formatHistoryDateClock(timestamp: number | null | undefined) {
   if (!timestamp) return '—';
   return new Date(timestamp).toLocaleString(undefined, {

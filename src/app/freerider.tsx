@@ -27,6 +27,7 @@ import {
   type RouteOffer,
 } from '@/lib/freerider';
 import {
+  formatDetectionText,
   formatHistoryClock,
   routeFromHistory,
   type RouteHistoryRecord,
@@ -262,9 +263,9 @@ function RouteCard({
       <ThemedText type="small" themeColor="textSecondary">
         Expires {formatLocalDateTime(route.expireTime)}
       </ThemedText>
-      {record?.discoveredAt ? (
+      {record ? (
         <ThemedText type="small" themeColor="textSecondary">
-          Detected {formatHistoryClock(record.discoveredAt)}
+          {formatDetectionText(record)}
           {record.status === 'active' || !record.disappearedAt
             ? ''
             : ` · Gone ${formatHistoryClock(record.disappearedAt)}`}

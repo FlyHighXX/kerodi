@@ -14,6 +14,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import {
   buildPairPatternSummary,
+  formatDetectionText,
   formatHistoryClock,
   formatHistoryDateClock,
   listTopPairs,
@@ -63,7 +64,8 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
           </View>
 
           <ThemedText type="small" themeColor="textSecondary">
-            Times are when Kerodi detected the route, to the minute.
+            Times are when Kerodi detected the route, to the minute. Routes present at first
+            launch are marked Baseline because their true detection time is unknown.
           </ThemedText>
 
           <ScrollView
@@ -142,7 +144,7 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
             ) : null}
 
             <ThemedView type="background" style={styles.card}>
-              <ThemedText type="smallBold">Recent detections</ThemedText>
+              <ThemedText type="smallBold">Recent routes</ThemedText>
               {recent.length === 0 ? (
                 <ThemedText type="small" themeColor="textSecondary">
                   Nothing recorded yet.
@@ -155,8 +157,8 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
                         {record.fromCity} → {record.toCity}
                       </ThemedText>
                       <ThemedText type="small" themeColor="textSecondary">
-                        Detected {formatHistoryClock(record.discoveredAt)}
-                        {record.status === 'active'
+                        {formatDetectionText(record)}
+                        {record.status === 'active' || !record.disappearedAt
                           ? ''
                           : ` · ${statusLabel(record.status)} ${formatHistoryClock(record.disappearedAt)}`}
                       </ThemedText>
