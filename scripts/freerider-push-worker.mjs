@@ -521,6 +521,13 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    // Legacy preferences POST from Settings. Listeners are now explicit, so
+    // acknowledge the token/filters without starting an implicit session.
+    if (request.method === 'POST' && url.pathname === '/') {
+      sendJson(response, 200, { ok: true });
+      return;
+    }
+
     if (request.method === 'POST' && url.pathname === '/start') {
       const session = await startSession(body);
       sendJson(response, 200, { session });
