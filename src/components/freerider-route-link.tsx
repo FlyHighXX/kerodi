@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -17,8 +17,17 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { FREERIDER_SITE_URL } from '@/lib/freerider';
 
+export type FreeriderRouteLinkRoute = {
+  pickupName: string;
+  returnName: string;
+  carModel?: string | null;
+};
+
 type Props = {
   url: string;
+  pickupName?: string | null;
+  returnName?: string | null;
+  carModel?: string | null;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 };
@@ -52,6 +61,66 @@ const SAME_WINDOW_POPUP_PATCH = `
 })();
 `;
 
+/**
+ * The site's own Book button is the only supported way to enter the booking
+ * flow without a preset pickup time: it sets the selected route in Redux, then
+ * navigates to the flow. Replicate that by selecting the matching card and
+ * pressing the same button inside the WebView.
+ */
+function buildAutoSelectScript(route: FreeriderRouteLinkRoute) {
+  const target = JSON.stringify({
+    pickupName: route.pickupName,
+    returnName: route.returnName,
+    carModel: route.carModel ?? '',
+  });
+
+  return `
+(function () {
+  if (window.__kerodiRouteLinkAutoSelect) return true;
+  window.__kerodiRouteLinkAutoSelect = true;
+  var target = ${target};
+  var deadline = Date.now() + 10000;
+  function normalized(value) {
+    return String(value || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+  }
+  function findCard() {
+    var cards = document.querySelectorAll('.route-card');
+    for (var i = 0; i < cards.length; i += 1) {
+      var text = normalized(cards[i].textContent);
+      if (
+        text.indexOf(normalized(target.pickupName)) !== -1 &&
+        text.indexOf(normalized(target.returnName)) !== -1 &&
+        (!target.carModel || text.indexOf(normalized(target.carModel)) !== -1)
+      ) {
+        return cards[i];
+      }
+    }
+    return null;
+  }
+  function clickBook() {
+    var button = document.getElementById('start-booking-flow-button');
+    if (!button) return false;
+    button.click();
+    return true;
+  }
+  function step() {
+    if (clickBook()) return;
+    var card = findCard();
+    if (card) {
+      card.click();
+      setTimeout(function () {
+        if (!clickBook() && Date.now() < deadline) setTimeout(step, 200);
+      }, 300);
+      return;
+    }
+    if (Date.now() < deadline) setTimeout(step, 200);
+  }
+  step();
+  return true;
+})();
+`;
+}
+
 function isSiteRoot(url: string) {
   return url.split(/[?#]/)[0].replace(/\/$/, '') === SITE_ROOT;
 }
@@ -64,8 +133,23 @@ function hasMsalResponse(url: string) {
  * Opens the booking page in a persistent in-app WebView. The site's MSAL cache
  * lives in that WebView, so signing in once is enough for later routes.
  */
-export function FreeriderRouteLink({ url, children, style }: Props) {
+export function FreeriderRouteLink({
+  url,
+  pickupName,
+  returnName,
+  carModel,
+  children,
+  style,
+}: Props) {
   const theme = useTheme();
+  const injectedJavaScript = useMemo(() => {
+    if (!pickupName || !returnName) return SAME_WINDOW_POPUP_PATCH;
+    return `${SAME_WINDOW_POPUP_PATCH}\n${buildAutoSelectScript({
+      pickupName,
+      returnName,
+      carModel,
+    })}`;
+  }, [pickupName, returnName, carModel]);
   const [visible, setVisible] = useState(false);
   const [currentUrl, setCurrentUrl] = useState(url);
   const [loading, setLoading] = useState(true);
@@ -118,10 +202,10 @@ export function FreeriderRouteLink({ url, children, style }: Props) {
       clearRestoreTimer();
       restoreTimer.current = setTimeout(() => {
         restoreTimer.current = null;
-        setCurrentUrl(url);
+        webViewRef.current?.reload();
       }, 1200);
     },
-    [clearRestoreTimer, url],
+    [clearRestoreTimer],
   );
 
   const handleNavigationStateChange = useCallback((nav: WebViewNavigation) => {
@@ -180,7 +264,7 @@ export function FreeriderRouteLink({ url, children, style }: Props) {
                   hitSlop={8}>
                   <ThemedText type="small">Reload</ThemedText>
                 </Pressable>
-                <Pressable onPress={() => setCurrentUrl(url)} hitSlop={8}>
+                <Pressable onPress={() => webViewRef.current?.reload()} hitSlop={8}>
                   <ThemedText type="small">Route</ThemedText>
                 </Pressable>
               </View>
@@ -201,7 +285,7 @@ export function FreeriderRouteLink({ url, children, style }: Props) {
               mediaPlaybackRequiresUserAction={false}
               setSupportMultipleWindows={false}
               injectedJavaScriptBeforeContentLoaded={SAME_WINDOW_POPUP_PATCH}
-              injectedJavaScript={SAME_WINDOW_POPUP_PATCH}
+              injectedJavaScript={injectedJavaScript}
               onMessage={() => {}}
               onLoadStart={() => setLoading(true)}
               onLoadEnd={handleLoadEnd}

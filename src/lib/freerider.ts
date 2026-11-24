@@ -59,21 +59,6 @@ export type RouteOffer = FreerideRouteResponse & {
   returnName: string;
 };
 
-/**
- * The site deep-links into its booking flow with a hash:
- * `/booking-flow#id=<routeId>&date=<epochMillis>`.
- * `availableAt` is a local wall-clock string, so parsing it on the device gives
- * the same local time that the site's date formatter expects.
- */
-export function buildFreeriderRouteUrl(route: RouteOffer) {
-  const timestamp = Date.parse(route.availableAt);
-  const params = [`id=${encodeURIComponent(String(route.id))}`];
-  if (Number.isFinite(timestamp)) {
-    params.push(`date=${encodeURIComponent(String(timestamp))}`);
-  }
-  return `${FREERIDER_SITE_URL}booking-flow#${params.join('&')}`;
-}
-
 /** Flatten the site's grouped response into one list of searchable offers. */
 export function normalizeRoutes(groups: FreerideRouteGroup[]): RouteOffer[] {
   const routes: RouteOffer[] = [];

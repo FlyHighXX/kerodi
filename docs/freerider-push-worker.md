@@ -63,6 +63,10 @@ In the app:
 
 Starting a listener saves a baseline of current route IDs, so existing routes do not trigger an immediate new-route alert. If one of those routes later leaves and returns, it does trigger an available-again alert. The listener expires automatically when its duration ends.
 
-## 3. Notification tap
+## 3. Booking links
+
+Route links open `hertzfreerider.se` in the in-app WebView and use the site’s own route card and **Book** button to enter the booking flow. No pickup time is preselected — the booking page opens on the time-selection step so you can choose it yourself. The site requires this route-selection step; a bare `/booking-flow#id=…` deep link redirects to the start page.
+
+## 4. Notification tap
 
 Tapping the push opens the Freerider tab.
