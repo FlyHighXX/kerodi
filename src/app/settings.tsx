@@ -22,12 +22,18 @@ import {
 import {
   disableFreeriderPushAlerts,
   enableFreeriderPushAlerts,
-  FREERIDER_PUSH_ENDPOINT,
   readStoredFreeriderPushToken,
   syncFreeriderPushAlertState,
   syncFreeriderPushPreferences,
   uploadFreeriderPushPreferences,
 } from '@/lib/freerider-push';
+import { checkWorkerHealth } from '@/lib/freerider-sessions';
+import {
+  defaultWorkerUrl,
+  isValidWorkerUrl,
+  readWorkerUrl,
+  writeWorkerUrl,
+} from '@/lib/freerider-worker-url';
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -39,6 +45,11 @@ export default function SettingsScreen() {
   const [alertsBusy, setAlertsBusy] = useState(false);
   const [alertsError, setAlertsError] = useState<string | null>(null);
   const [pushToken, setPushToken] = useState<string | null>(null);
+  const [workerUrlDraft, setWorkerUrlDraft] = useState('');
+  const [workerUrlSaved, setWorkerUrlSaved] = useState('');
+  const [workerUrlBusy, setWorkerUrlBusy] = useState(false);
+  const [workerUrlError, setWorkerUrlError] = useState<string | null>(null);
+  const [workerTestResult, setWorkerTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -66,11 +77,23 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     let active = true;
+    void readWorkerUrl().then((url) => {
+      if (!active) return;
+      setWorkerUrlDraft(url);
+      setWorkerUrlSaved(url);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     readStoredFreeriderPushToken()
       .then((token) => {
         if (!active || !token) return;
         setPushToken(token);
-        if (FREERIDER_PUSH_ENDPOINT) void syncFreeriderPushPreferences();
+        void syncFreeriderPushPreferences();
       })
       .catch(() => {});
     return () => {
@@ -80,14 +103,14 @@ export default function SettingsScreen() {
 
   // Keep the worker's filters in sync with the saved From/To search.
   useEffect(() => {
-    if (!alertsEnabled || !pushToken || !FREERIDER_PUSH_ENDPOINT) return;
+    if (!alertsEnabled || !pushToken || !workerUrlSaved) return;
     const timer = setTimeout(() => {
       void uploadFreeriderPushPreferences(pushToken).then((ok) => {
         setAlertsError(ok ? null : 'Could not reach the push worker. Check its URL.');
       });
     }, 500);
     return () => clearTimeout(timer);
-  }, [alertsEnabled, fromQuery, pushToken, toQuery]);
+  }, [alertsEnabled, fromQuery, pushToken, toQuery, workerUrlSaved]);
 
   const toggleAlerts = useCallback(async () => {
     if (alertsBusy || Platform.OS === 'web') return;
@@ -108,17 +131,75 @@ export default function SettingsScreen() {
         }
 
         setPushToken(token);
-        if (FREERIDER_PUSH_ENDPOINT) {
-          const ok = await uploadFreeriderPushPreferences(token);
-          setAlertsError(ok ? null : 'Push alerts enabled, but the worker could not be reached.');
-        }
+        const ok = await uploadFreeriderPushPreferences(token);
+        setAlertsError(
+          ok
+            ? null
+            : workerUrlSaved
+              ? 'Push alerts enabled, but the worker could not be reached.'
+              : 'Push alerts enabled. Set the worker URL below to send them to the worker.',
+        );
       }
     } catch {
       setAlertsError('Could not change notification settings on this device.');
     } finally {
       setAlertsBusy(false);
     }
-  }, [alertsBusy, alertsEnabled]);
+  }, [alertsBusy, alertsEnabled, workerUrlSaved]);
+
+  const saveWorkerUrl = useCallback(async () => {
+    if (!isValidWorkerUrl(workerUrlDraft)) {
+      setWorkerUrlError('Enter a full URL, for example http://192.168.1.171:8787');
+      return;
+    }
+    setWorkerUrlBusy(true);
+    setWorkerUrlError(null);
+    setWorkerTestResult(null);
+    try {
+      const saved = await writeWorkerUrl(workerUrlDraft);
+      setWorkerUrlDraft(saved);
+      setWorkerUrlSaved(saved);
+      if (pushToken) void syncFreeriderPushPreferences();
+    } catch {
+      setWorkerUrlError('Could not save the worker URL.');
+    } finally {
+      setWorkerUrlBusy(false);
+    }
+  }, [pushToken, workerUrlDraft]);
+
+  const resetWorkerUrl = useCallback(async () => {
+    setWorkerUrlBusy(true);
+    setWorkerUrlError(null);
+    setWorkerTestResult(null);
+    try {
+      await writeWorkerUrl('');
+      const fallback = defaultWorkerUrl();
+      setWorkerUrlDraft(fallback);
+      setWorkerUrlSaved(fallback);
+    } catch {
+      setWorkerUrlError('Could not reset the worker URL.');
+    } finally {
+      setWorkerUrlBusy(false);
+    }
+  }, []);
+
+  const testWorkerUrl = useCallback(async () => {
+    setWorkerUrlError(null);
+    if (workerUrlDraft !== workerUrlSaved) {
+      setWorkerTestResult('Save the URL before testing it.');
+      return;
+    }
+    setWorkerUrlBusy(true);
+    setWorkerTestResult(null);
+    try {
+      const ok = await checkWorkerHealth();
+      setWorkerTestResult(
+        ok ? 'Worker reachable.' : 'Could not reach the worker. Check the URL and network.',
+      );
+    } finally {
+      setWorkerUrlBusy(false);
+    }
+  }, [workerUrlDraft, workerUrlSaved]);
 
   return (
     <ThemedView style={styles.container}>
@@ -188,7 +269,7 @@ export default function SettingsScreen() {
                 ? 'Push alerts are sent by the worker whenever a new route matches your From/To search.'
                 : 'Get a notification when a new route matches your From/To search.'}
             </ThemedText>
-            {alertsEnabled && pushToken && !FREERIDER_PUSH_ENDPOINT ? (
+            {alertsEnabled && pushToken && !workerUrlSaved ? (
               <View style={styles.tokenBlock}>
                 <ThemedText type="small" themeColor="textSecondary">
                   Push token for the worker:
@@ -201,6 +282,59 @@ export default function SettingsScreen() {
             {alertsError ? (
               <ThemedText type="small" themeColor="textSecondary">
                 {alertsError}
+              </ThemedText>
+            ) : null}
+          </ThemedView>
+
+          <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedText type="smallBold">Worker connection</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Address of the machine running the Freerider worker. Use its LAN address at home or
+              its VPN address when you are away.
+            </ThemedText>
+            <TextInput
+              value={workerUrlDraft}
+              onChangeText={setWorkerUrlDraft}
+              placeholder="http://192.168.1.171:8787"
+              placeholderTextColor={theme.textSecondary}
+              autoCorrect={false}
+              autoCapitalize="none"
+              keyboardType="url"
+              style={[styles.searchInput, { backgroundColor: theme.background, color: theme.text }]}
+            />
+            <View style={styles.workerActions}>
+              <Pressable
+                onPress={() => void saveWorkerUrl()}
+                disabled={workerUrlBusy}
+                style={({ pressed }) => [
+                  styles.button,
+                  { backgroundColor: theme.backgroundSelected },
+                  workerUrlBusy && styles.disabled,
+                  pressed && styles.pressed,
+                ]}>
+                <ThemedText type="smallBold">{workerUrlBusy ? '…' : 'Save'}</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => void testWorkerUrl()}
+                disabled={workerUrlBusy || workerUrlDraft !== workerUrlSaved}
+                hitSlop={8}>
+                <ThemedText type="link">Test</ThemedText>
+              </Pressable>
+              <Pressable onPress={() => void resetWorkerUrl()} disabled={workerUrlBusy} hitSlop={8}>
+                <ThemedText type="link">Reset</ThemedText>
+              </Pressable>
+            </View>
+            <ThemedText type="small" themeColor="textSecondary">
+              {workerUrlSaved ? `Saved: ${workerUrlSaved}` : 'No worker URL saved yet.'}
+            </ThemedText>
+            {workerUrlError ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {workerUrlError}
+              </ThemedText>
+            ) : null}
+            {workerTestResult ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {workerTestResult}
               </ThemedText>
             ) : null}
           </ThemedView>
@@ -324,6 +458,11 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
     borderRadius: Spacing.five,
+  },
+  workerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
   },
   tokenBlock: {
     gap: Spacing.half,

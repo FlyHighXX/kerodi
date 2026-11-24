@@ -38,21 +38,24 @@ While listeners are active, each poll also records detected route IDs in `HISTOR
 
 ## 2. App configuration
 
-The app talks to the worker at `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT`. It defaults to:
+The worker address is saved on the device in **Settings → Worker connection**. There is no baked-in LAN address, because private addresses depend on the network the phone is on. A build-time `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT` is used only as the initial value if one was provided.
+
+Use the address of the machine running the worker, for example:
 
 ```text
-http://192.168.1.39:8787
+http://192.168.1.171:8787
 ```
 
-Set that environment variable at build time to use a different host.
+Use `Test` in Settings to check the connection. Saved addresses work across builds; switching from a LAN address to a VPN or public address does not require a rebuild. Android cleartext traffic is enabled through `expo-build-properties` so plain HTTP to the worker is allowed.
 
 In the app:
 
-1. Open **Settings** and turn on **New-route alerts** to register a push token.
-2. Set From/To filters in Settings.
-3. On the Freerider tab, tap **Start** next to the hidden duration control.
-4. Use `1h ▾` to choose the listener duration.
-5. Tap **listening** to see and stop active listeners.
+1. Open **Settings → Worker connection**, enter the worker URL, and tap **Save**.
+2. Turn on **New-route alerts** to register a push token.
+3. Set From/To filters in Settings.
+4. On the Freerider tab, tap **Start** next to the hidden duration control.
+5. Use `1h ▾` to choose the listener duration.
+6. Tap **listening** to see and stop active listeners.
 
 Starting a listener saves a baseline of current route IDs, so existing routes do not trigger alerts. The listener expires automatically when its duration ends.
 

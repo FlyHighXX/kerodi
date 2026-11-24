@@ -8,13 +8,10 @@ import {
   readLocationFilters,
   setNotificationsEnabled,
 } from '@/lib/freerider-storage';
+import { readWorkerUrl } from '@/lib/freerider-worker-url';
 
 const PUSH_TOKEN_KEY = 'kerodi.freerider.push-token.v1';
 export const FREERIDER_NOTIFICATION_CHANNEL = 'freerider';
-
-/** Control API for starting/stopping worker listeners. */
-const configuredEndpoint = process.env.EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT?.trim();
-export const FREERIDER_PUSH_ENDPOINT = configuredEndpoint || 'http://192.168.1.39:8787';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -85,14 +82,15 @@ export async function syncFreeriderPushAlertState() {
 
 /** Sends the token and current filters to the worker endpoint, if configured. */
 export async function uploadFreeriderPushPreferences(token: string) {
-  if (!FREERIDER_PUSH_ENDPOINT) return false;
+  const endpoint = await readWorkerUrl();
+  if (!endpoint) return false;
 
   const filters = await readLocationFilters();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10 * 1000);
 
   try {
-    const response = await fetch(FREERIDER_PUSH_ENDPOINT, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -5,7 +5,7 @@ import {
   mergeRouteHistory,
   type RouteHistoryRecord,
 } from '@/lib/freerider-history';
-import { FREERIDER_PUSH_ENDPOINT } from '@/lib/freerider-push';
+import { readWorkerUrl } from '@/lib/freerider-worker-url';
 
 const CACHE_KEY = 'kerodi.freerider.sessions.v1';
 const DURATION_KEY = 'kerodi.freerider.watch-duration-minutes.v1';
@@ -32,12 +32,27 @@ type StartInput = {
   durationMinutes: number;
 };
 
-function baseUrl() {
-  return FREERIDER_PUSH_ENDPOINT.replace(/\/$/, '');
+export async function checkWorkerHealth() {
+  const endpoint = await readWorkerUrl();
+  if (!endpoint) return false;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(`${endpoint}/health`, { signal: controller.signal });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${baseUrl()}${path}`, {
+  const endpoint = await readWorkerUrl();
+  if (!endpoint) throw new Error('Set the worker URL in Settings first.');
+
+  const response = await fetch(`${endpoint}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
