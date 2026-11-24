@@ -19,6 +19,7 @@ The worker listens on `0.0.0.0:8787` and exposes:
 | Method | Path | Body | Purpose |
 |---|---|---|---|
 | `GET` | `/health` | — | Health check |
+| `POST` | `/` | `{ token, from, to }` | Legacy preferences ack from Settings; does not start a listener |
 | `POST` | `/start` | `{ token, from, to, durationMinutes }` | Start a listener with a fresh baseline |
 | `POST` | `/stop` | `{ token, id }` | Stop one listener |
 | `POST` | `/status` | `{ token, since? }` | List active listeners and route history updated after `since` |
@@ -58,7 +59,7 @@ Use `Test` in Settings to check the connection. Saved addresses work across buil
 In the app:
 
 1. Open **Settings → Worker connection**, enter the worker URL, and tap **Save**.
-2. Turn on **New-route alerts** to register a push token.
+2. Turn on **New-route alerts** to register a push token. This only registers the device; it does not start listening.
 3. Set From/To filters in Settings.
 4. On the Freerider tab, tap **Start** next to the hidden duration control.
 5. Use `1h ▾` to choose the listener duration.
