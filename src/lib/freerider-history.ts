@@ -10,6 +10,14 @@ import {
 
 export type RouteStatus = 'active' | 'unavailable' | 'expired';
 
+export type RouteTransitionKind = 'detected' | 'unavailable' | 'expired' | 'available-again';
+
+export type RouteTransition = {
+  at: number;
+  status: RouteStatus;
+  kind: RouteTransitionKind;
+};
+
 export type RouteHistoryRecord = {
   id: number;
   transportOfferId: number;
@@ -34,6 +42,12 @@ export type RouteHistoryRecord = {
   status: RouteStatus;
   /** Existing routes at first launch are baseline rows, not posting events. */
   countsTowardPatterns: boolean;
+  /** Status changes, newest last. Capped; reappearanceCount keeps the full tally. */
+  transitions: RouteTransition[];
+  reappearanceCount: number;
+  totalUnavailableMs: number;
+  lastUnavailableAt?: number;
+  lastReappearedAt?: number;
 };
 
 export type PatternBucket = {
@@ -46,6 +60,7 @@ export type PairPatternSummary = {
   from: string;
   to: string;
   total: number;
+  reappearances: number;
   firstAt: number | null;
   lastAt: number | null;
   perWeek: number;
@@ -64,6 +79,8 @@ export type PairTotal = {
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MAX_TRANSITIONS = 50;
+const TRANSITION_MERGE_WINDOW_MS = 5 * 60 * 1000;
 
 function cityName(location: FreerideLocation) {
   return location.city?.trim() || location.name?.trim() || 'Unknown';
@@ -74,7 +91,7 @@ function isExpired(expireTime: string, now: number) {
   return Number.isFinite(timestamp) && now >= timestamp;
 }
 
-function makeRecord(route: RouteOffer, now: number, countsTowardPatterns: boolean): RouteHistoryRecord {
+function routeFields(route: RouteOffer) {
   return {
     id: route.id,
     transportOfferId: route.transportOfferId,
@@ -91,13 +108,99 @@ function makeRecord(route: RouteOffer, now: number, countsTowardPatterns: boolea
     latestReturn: route.latestReturn,
     expireTime: route.expireTime,
     carModel: route.carModel,
+  };
+}
+
+function makeRecord(route: RouteOffer, now: number, countsTowardPatterns: boolean): RouteHistoryRecord {
+  return {
+    ...routeFields(route),
     discoveredAt: now,
     firstSeenAt: now,
     lastSeenAt: now,
     updatedAt: now,
     status: 'active',
     countsTowardPatterns,
+    transitions: countsTowardPatterns
+      ? [{ at: now, status: 'active', kind: 'detected' }]
+      : [],
+    reappearanceCount: 0,
+    totalUnavailableMs: 0,
   };
+}
+
+function historyStatusFor(present: boolean, expireTime: string, now: number): RouteStatus {
+  if (present) return 'active';
+  return isExpired(expireTime, now) ? 'expired' : 'unavailable';
+}
+
+/** Append a transition only when the status actually changes. */
+function applyTransition(
+  record: RouteHistoryRecord,
+  status: RouteStatus,
+  now: number,
+): RouteHistoryRecord {
+  if (record.status === status) return record;
+
+  const kind: RouteTransitionKind =
+    status === 'active'
+      ? record.transitions?.length
+        ? 'available-again'
+        : 'detected'
+      : status;
+
+  let reappearanceCount = record.reappearanceCount ?? 0;
+  let totalUnavailableMs = record.totalUnavailableMs ?? 0;
+  let lastUnavailableAt = record.lastUnavailableAt;
+  let lastReappearedAt = record.lastReappearedAt;
+
+  if (status === 'active') {
+    if (lastUnavailableAt) {
+      totalUnavailableMs += Math.max(0, now - lastUnavailableAt);
+      lastUnavailableAt = undefined;
+    }
+    if (kind === 'available-again') {
+      reappearanceCount += 1;
+      lastReappearedAt = now;
+    }
+  } else if (record.status === 'active') {
+    lastUnavailableAt = now;
+  }
+
+  const transitions = [
+    ...(Array.isArray(record.transitions) ? record.transitions : []),
+    { at: now, status, kind },
+  ].slice(-MAX_TRANSITIONS);
+
+  return {
+    ...record,
+    status,
+    disappearedAt: status === 'active' ? undefined : record.disappearedAt ?? now,
+    transitions,
+    reappearanceCount,
+    totalUnavailableMs,
+    lastUnavailableAt,
+    lastReappearedAt,
+    updatedAt: now,
+  };
+}
+
+function dedupeTransitions(transitions: RouteTransition[]) {
+  const sorted = [...transitions].sort((a, b) => a.at - b.at);
+  const merged: RouteTransition[] = [];
+
+  for (const transition of sorted) {
+    const previous = merged[merged.length - 1];
+    if (
+      previous &&
+      previous.status === transition.status &&
+      Math.abs(transition.at - previous.at) <= TRANSITION_MERGE_WINDOW_MS
+    ) {
+      continue;
+    }
+    merged.push(transition);
+  }
+
+  return merged.slice(-MAX_TRANSITIONS);
 }
 
 async function readHistoryMap(): Promise<Record<string, RouteHistoryRecord>> {
@@ -137,25 +240,26 @@ export async function reconcileRouteHistory(routes: RouteOffer[], now: number) {
       continue;
     }
 
-    history[key] = {
+    const refreshed: RouteHistoryRecord = {
       ...existing,
-      ...makeRecord(route, existing.discoveredAt, existing.countsTowardPatterns),
-      firstSeenAt: existing.firstSeenAt,
-      discoveredAt: existing.discoveredAt,
+      ...routeFields(route),
+      firstSeenAt: existing.firstSeenAt ?? existing.discoveredAt ?? now,
+      discoveredAt: existing.discoveredAt ?? now,
       lastSeenAt: now,
-      disappearedAt: undefined,
       updatedAt: now,
-      status: 'active',
     };
+    history[key] = applyTransition(refreshed, 'active', now);
     changed = true;
   }
 
-  for (const record of Object.values(history)) {
-    if (record.status !== 'active' || currentIds.has(record.id)) continue;
-    record.status = isExpired(record.expireTime, now) ? 'expired' : 'unavailable';
-    record.disappearedAt = now;
-    record.updatedAt = now;
-    changed = true;
+  // Re-check inactive rows too, so unavailable becomes expired once expireTime passes.
+  for (const [key, record] of Object.entries(history)) {
+    const nextStatus = historyStatusFor(currentIds.has(record.id), record.expireTime, now);
+    const updated = applyTransition(record, nextStatus, now);
+    if (updated !== record) {
+      history[key] = updated;
+      changed = true;
+    }
   }
 
   if (changed) await writeHistoryMap(history);
@@ -171,6 +275,17 @@ export async function latestHistoryUpdatedAt() {
   return records.reduce((latest, record) => Math.max(latest, record.updatedAt ?? 0), 0);
 }
 
+function mergeRecord(existing: RouteHistoryRecord, incoming: RouteHistoryRecord): RouteHistoryRecord {
+  const winner = (incoming.updatedAt ?? 0) >= (existing.updatedAt ?? 0) ? incoming : existing;
+  return {
+    ...winner,
+    transitions: dedupeTransitions([
+      ...(Array.isArray(existing.transitions) ? existing.transitions : []),
+      ...(Array.isArray(incoming.transitions) ? incoming.transitions : []),
+    ]),
+  };
+}
+
 /** Worker records win when both sides have a row for the same route ID. */
 export async function mergeRouteHistory(incoming: RouteHistoryRecord[]) {
   if (!Array.isArray(incoming) || incoming.length === 0) return readRouteHistory();
@@ -180,9 +295,7 @@ export async function mergeRouteHistory(incoming: RouteHistoryRecord[]) {
     if (!record || typeof record.id !== 'number') continue;
     const key = String(record.id);
     const existing = history[key];
-    if (!existing || (record.updatedAt ?? 0) >= (existing.updatedAt ?? 0)) {
-      history[key] = record;
-    }
+    history[key] = existing ? mergeRecord(existing, record) : record;
   }
 
   await writeHistoryMap(history);
@@ -265,6 +378,7 @@ export function buildPairPatternSummary(
     from: fromQuery.trim(),
     to: toQuery.trim(),
     total,
+    reappearances: matching.reduce((sum, record) => sum + (record.reappearanceCount ?? 0), 0),
     firstAt,
     lastAt,
     perWeek: total / weeks,
@@ -322,4 +436,28 @@ export function formatHistoryDateClock(timestamp: number | null | undefined) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+export function formatDurationMs(duration: number | null | undefined) {
+  if (!duration || duration <= 0) return '0m';
+  const minutes = Math.round(duration / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (hours < 24) return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const dayHours = hours % 24;
+  return dayHours ? `${days}d ${dayHours}h` : `${days}d`;
+}
+
+export function formatTransitionText(transition: RouteTransition) {
+  const label =
+    transition.kind === 'available-again'
+      ? 'Available again'
+      : transition.kind === 'detected'
+        ? 'Detected'
+        : transition.status === 'unavailable'
+          ? 'Unavailable'
+          : 'Expired';
+  return `${label} ${formatHistoryClock(transition.at)}`;
 }
