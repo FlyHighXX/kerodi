@@ -1,0 +1,73 @@
+// Kerodi tailnet policy file (HuJSON).
+// Paste into https://console.tailscale.com/admin/acls
+// Replace autogroup:owner only if a different user must administer these hosts.
+
+{
+  // Service identities. Tag owners may assign these tags when creating auth keys.
+  // A single device can carry more than one tag (the Android build host does).
+  "tagOwners": {
+    "tag:freerider-worker": ["autogroup:owner"],
+    "tag:jenkins-agent": ["autogroup:owner"],
+    "tag:jenkins-controller": ["autogroup:owner"],
+    "tag:kerodi-device": ["autogroup:owner"],
+  },
+
+  "acls": [
+    // You: manage everything.
+    {
+      "action": "accept",
+      "src": ["autogroup:owner"],
+      "dst": [
+        "tag:freerider-worker:22,8787",
+        "tag:jenkins-agent:22",
+        "tag:jenkins-controller:22,8080,50000",
+      ],
+    },
+
+    // Phones/desktops running the Kerodi app: only the push worker control API.
+    {
+      "action": "accept",
+      "src": ["tag:kerodi-device", "autogroup:owner"],
+      "dst": ["tag:freerider-worker:8787"],
+    },
+
+    // Build agent initiates the inbound JNLP connection to the controller.
+    {
+      "action": "accept",
+      "src": ["tag:jenkins-agent"],
+      "dst": ["tag:jenkins-controller:50000"],
+    },
+
+    // Controller only needs SSH back to the agent for maintenance.
+    {
+      "action": "accept",
+      "src": ["tag:jenkins-controller"],
+      "dst": ["tag:jenkins-agent:22"],
+    },
+  ],
+
+  // Optional: Tailscale SSH. Requires `tailscale up --ssh` on each destination.
+  "ssh": [
+    {
+      "action": "accept",
+      "src": ["autogroup:owner"],
+      "dst": ["tag:freerider-worker", "tag:jenkins-agent", "tag:jenkins-controller"],
+      "users": ["autogroup:nonroot"],
+    },
+  ],
+
+  // Guardrails: fail policy updates that accidentally expose Jenkins or
+  // let app devices reach anything beyond the worker control port.
+  "tests": [
+    {
+      "src": "tag:kerodi-device",
+      "accept": ["tag:freerider-worker:8787"],
+      "deny": ["tag:jenkins-controller:8080", "tag:jenkins-controller:50000"],
+    },
+    {
+      "src": "tag:jenkins-agent",
+      "accept": ["tag:jenkins-controller:50000"],
+      "deny": ["tag:jenkins-controller:8080", "tag:freerider-worker:8787"],
+    },
+  ],
+}
