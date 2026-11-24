@@ -2,6 +2,8 @@
 
 Second-level alerts are sent by the tiny worker in `scripts/freerider-push-worker.mjs`. The app itself does not poll for alerts.
 
+For reaching the worker from other networks, run it behind Tailscale and use a tailnet address in **Settings → Worker connection**. See [Tailscale setup](./tailscale-setup.md).
+
 ## 1. Run the worker
 
 ```bash

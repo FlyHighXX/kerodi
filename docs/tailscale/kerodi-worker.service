@@ -1,0 +1,26 @@
+# Install on a Linux host at /etc/systemd/system/kerodi-worker.service after
+# adjusting paths and the `kerodi` user. Then:
+#   sudo mkdir -p /var/lib/kerodi && sudo chown kerodi:kerodi /var/lib/kerodi
+#   sudo systemctl daemon-reload && sudo systemctl enable --now kerodi-worker
+[Unit]
+Description=Kerodi Freerider push worker
+Documentation=https://github.com/FlyHighXX/kerodi/blob/main/docs/freerider-push-worker.md
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kerodi
+Group=kerodi
+WorkingDirectory=/opt/kerodi
+Environment=CONTROL_HOST=0.0.0.0
+Environment=CONTROL_PORT=8787
+Environment=POLL_SECONDS=10
+Environment=SESSIONS_FILE=/var/lib/kerodi/freerider-sessions.json
+Environment=HISTORY_FILE=/var/lib/kerodi/freerider-history.json
+ExecStart=/usr/bin/node /opt/kerodi/scripts/freerider-push-worker.mjs
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
