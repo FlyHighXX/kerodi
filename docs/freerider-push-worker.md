@@ -59,11 +59,10 @@ Use `Test` in Settings to check the connection. Saved addresses work across buil
 In the app:
 
 1. Open **Settings → Worker connection**, enter the worker URL, and tap **Save**.
-2. Turn on **New-route alerts** to register a push token. This only registers the device; it does not start listening.
-3. Set From/To filters in Settings.
-4. On the Freerider tab, tap **Start** next to the hidden duration control.
-5. Use `1h ▾` to choose the listener duration.
-6. Tap **listening** to see and stop active listeners.
+2. Set From/To filters in Settings.
+3. On the Freerider tab, tap **Start** next to the hidden duration control. The first time, Android asks for notification permission and the app registers the push token automatically.
+4. Use `1h ▾` to choose the listener duration.
+5. Tap **listening** to see and stop active listeners.
 
 Starting a listener saves a baseline of current route IDs, so existing routes do not trigger an immediate new-route alert. If one of those routes later leaves and returns, it does trigger an available-again alert. The listener expires automatically when its duration ends.
 

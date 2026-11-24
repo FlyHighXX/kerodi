@@ -3,7 +3,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   LOCATION_FILTERS_KEY,
   NOTIFIED_ROUTES_KEY,
-  NOTIFICATIONS_ENABLED_KEY,
   POLL_SECONDS_KEY,
   SEEN_ROUTES_KEY,
 } from '@/lib/freerider';
@@ -83,19 +82,5 @@ export async function writePollSeconds(seconds: number) {
 export async function writeLocationFilters({ from, to }: LocationFilters) {
   try {
     await AsyncStorage.setItem(LOCATION_FILTERS_KEY, JSON.stringify({ from, to }));
-  } catch {}
-}
-
-export async function isNotificationsEnabled() {
-  try {
-    return (await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY)) === 'true';
-  } catch {
-    return false;
-  }
-}
-
-export async function setNotificationsEnabled(enabled: boolean) {
-  try {
-    await AsyncStorage.setItem(NOTIFICATIONS_ENABLED_KEY, enabled ? 'true' : 'false');
   } catch {}
 }

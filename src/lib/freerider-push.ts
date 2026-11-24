@@ -3,13 +3,6 @@ import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-import {
-  isNotificationsEnabled,
-  readLocationFilters,
-  setNotificationsEnabled,
-} from '@/lib/freerider-storage';
-import { readWorkerUrl } from '@/lib/freerider-worker-url';
-
 const PUSH_TOKEN_KEY = 'kerodi.freerider.push-token.v1';
 export const FREERIDER_NOTIFICATION_CHANNEL = 'freerider';
 
@@ -58,60 +51,14 @@ export async function readStoredFreeriderPushToken() {
 }
 
 /**
- * Enables push alerts only. All feed checks happen in the external worker;
- * the app no longer schedules local background notifications.
+ * Returns the saved push token, asking for notification permission on first
+ * use. Feed checks happen in the external worker; the app only registers the
+ * token used by listeners started on the Freerider tab.
  */
-export async function enableFreeriderPushAlerts() {
-  const token = await registerFreeriderPushToken();
-  if (!token) return null;
-  await setNotificationsEnabled(true);
-  return token;
-}
-
-export async function disableFreeriderPushAlerts() {
-  await setNotificationsEnabled(false);
-}
-
-export async function syncFreeriderPushAlertState() {
-  const [enabled, token] = await Promise.all([
-    isNotificationsEnabled(),
-    readStoredFreeriderPushToken(),
-  ]);
-  return enabled && Boolean(token);
-}
-
-/** Sends the token and current filters to the worker endpoint, if configured. */
-export async function uploadFreeriderPushPreferences(token: string) {
-  const endpoint = await readWorkerUrl();
-  if (!endpoint) return false;
-
-  const filters = await readLocationFilters();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10 * 1000);
-
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token,
-        from: filters.from,
-        to: filters.to,
-      }),
-      signal: controller.signal,
-    });
-    return response.ok;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-export async function syncFreeriderPushPreferences() {
-  const token = await readStoredFreeriderPushToken();
-  if (!token) return false;
-  return uploadFreeriderPushPreferences(token);
+export async function ensureFreeriderPushToken() {
+  const stored = await readStoredFreeriderPushToken();
+  if (stored) return stored;
+  return registerFreeriderPushToken();
 }
 
 export function addFreeriderNotificationOpenListener(onOpen: () => void) {

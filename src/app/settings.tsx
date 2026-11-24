@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -19,14 +12,6 @@ import {
   matchesLocationQuery,
   type FreerideLocation,
 } from '@/lib/freerider';
-import {
-  disableFreeriderPushAlerts,
-  enableFreeriderPushAlerts,
-  readStoredFreeriderPushToken,
-  syncFreeriderPushAlertState,
-  syncFreeriderPushPreferences,
-  uploadFreeriderPushPreferences,
-} from '@/lib/freerider-push';
 import { checkWorkerHealth } from '@/lib/freerider-sessions';
 import {
   defaultWorkerUrl,
@@ -41,10 +26,6 @@ export default function SettingsScreen() {
     useFreeriderFilters();
 
   const [locations, setLocations] = useState<FreerideLocation[]>([]);
-  const [alertsEnabled, setAlertsEnabled] = useState(false);
-  const [alertsBusy, setAlertsBusy] = useState(false);
-  const [alertsError, setAlertsError] = useState<string | null>(null);
-  const [pushToken, setPushToken] = useState<string | null>(null);
   const [workerUrlDraft, setWorkerUrlDraft] = useState('');
   const [workerUrlSaved, setWorkerUrlSaved] = useState('');
   const [workerUrlBusy, setWorkerUrlBusy] = useState(false);
@@ -65,18 +46,6 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     let active = true;
-    syncFreeriderPushAlertState()
-      .then((enabled) => {
-        if (active) setAlertsEnabled(enabled);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
     void readWorkerUrl().then((url) => {
       if (!active) return;
       setWorkerUrlDraft(url);
@@ -86,66 +55,6 @@ export default function SettingsScreen() {
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    let active = true;
-    readStoredFreeriderPushToken()
-      .then((token) => {
-        if (!active || !token) return;
-        setPushToken(token);
-        void syncFreeriderPushPreferences();
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  // Keep the worker's filters in sync with the saved From/To search.
-  useEffect(() => {
-    if (!alertsEnabled || !pushToken || !workerUrlSaved) return;
-    const timer = setTimeout(() => {
-      void uploadFreeriderPushPreferences(pushToken).then((ok) => {
-        setAlertsError(ok ? null : 'Could not reach the push worker. Check its URL.');
-      });
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [alertsEnabled, fromQuery, pushToken, toQuery, workerUrlSaved]);
-
-  const toggleAlerts = useCallback(async () => {
-    if (alertsBusy || Platform.OS === 'web') return;
-    setAlertsBusy(true);
-    setAlertsError(null);
-    try {
-      if (alertsEnabled) {
-        await disableFreeriderPushAlerts();
-        setAlertsEnabled(false);
-      } else {
-        const token = await enableFreeriderPushAlerts();
-        setAlertsEnabled(Boolean(token));
-        if (!token) {
-          setAlertsError(
-            'Allow notifications for Kerodi in system settings, then try again.',
-          );
-          return;
-        }
-
-        setPushToken(token);
-        const ok = await uploadFreeriderPushPreferences(token);
-        setAlertsError(
-          ok
-            ? null
-            : workerUrlSaved
-              ? 'Push alerts enabled, but the worker could not be reached.'
-              : 'Push alerts enabled. Set the worker URL below to send them to the worker.',
-        );
-      }
-    } catch {
-      setAlertsError('Could not change notification settings on this device.');
-    } finally {
-      setAlertsBusy(false);
-    }
-  }, [alertsBusy, alertsEnabled, workerUrlSaved]);
 
   const saveWorkerUrl = useCallback(async () => {
     if (!isValidWorkerUrl(workerUrlDraft)) {
@@ -159,13 +68,12 @@ export default function SettingsScreen() {
       const saved = await writeWorkerUrl(workerUrlDraft);
       setWorkerUrlDraft(saved);
       setWorkerUrlSaved(saved);
-      if (pushToken) void syncFreeriderPushPreferences();
     } catch {
       setWorkerUrlError('Could not save the worker URL.');
     } finally {
       setWorkerUrlBusy(false);
     }
-  }, [pushToken, workerUrlDraft]);
+  }, [workerUrlDraft]);
 
   const resetWorkerUrl = useCallback(async () => {
     setWorkerUrlBusy(true);
@@ -248,49 +156,11 @@ export default function SettingsScreen() {
           </ThemedView>
 
           <ThemedView type="backgroundElement" style={styles.card}>
-            <View style={styles.rowBetween}>
-              <ThemedText type="smallBold">New-route alerts</ThemedText>
-              <Pressable
-                onPress={() => void toggleAlerts()}
-                disabled={alertsBusy || Platform.OS === 'web'}
-                style={({ pressed }) => [
-                  styles.button,
-                  { backgroundColor: theme.backgroundSelected },
-                  (alertsBusy || Platform.OS === 'web') && styles.disabled,
-                  pressed && styles.pressed,
-                ]}>
-                <ThemedText type="smallBold">
-                  {alertsBusy ? '…' : alertsEnabled ? 'Turn off' : 'Turn on'}
-                </ThemedText>
-              </Pressable>
-            </View>
-            <ThemedText type="small" themeColor="textSecondary">
-              {alertsEnabled
-                ? 'Push alerts are sent by the worker whenever a new route matches your From/To search.'
-                : 'Get a notification when a new route matches your From/To search.'}
-            </ThemedText>
-            {alertsEnabled && pushToken && !workerUrlSaved ? (
-              <View style={styles.tokenBlock}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Push token for the worker:
-                </ThemedText>
-                <ThemedText type="code" selectable>
-                  {pushToken}
-                </ThemedText>
-              </View>
-            ) : null}
-            {alertsError ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                {alertsError}
-              </ThemedText>
-            ) : null}
-          </ThemedView>
-
-          <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText type="smallBold">Worker connection</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               Address of the machine running the Freerider worker. Use its Tailscale address when
-              you are away from home.
+              you are away from home. Notifications are set up automatically the first time you
+              start a listener on the Freerider tab.
             </ThemedText>
             <TextInput
               value={workerUrlDraft}
