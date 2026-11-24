@@ -264,12 +264,20 @@ function RouteCard({
         Expires {formatLocalDateTime(route.expireTime)}
       </ThemedText>
       {record ? (
-        <ThemedText type="small" themeColor="textSecondary">
-          {formatDetectionText(record)}
-          {record.status === 'active' || !record.disappearedAt
-            ? ''
-            : ` · Gone ${formatHistoryClock(record.disappearedAt)}`}
-        </ThemedText>
+        <>
+          <ThemedText type="small" themeColor="textSecondary">
+            {formatDetectionText(record)}
+            {record.status === 'active' || !record.disappearedAt
+              ? ''
+              : ` · Gone ${formatHistoryClock(record.disappearedAt)}`}
+          </ThemedText>
+          {record.reappearanceCount ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              Seen again {record.reappearanceCount}×
+              {record.lastReappearedAt ? ` · Last ${formatHistoryClock(record.lastReappearedAt)}` : ''}
+            </ThemedText>
+          ) : null}
+        </>
       ) : null}
 
       <FreeriderRouteLink url={buildFreeriderRouteUrl(route)} style={styles.siteLink}>

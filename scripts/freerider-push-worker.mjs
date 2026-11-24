@@ -17,9 +17,11 @@ const SESSIONS_FILE = process.env.SESSIONS_FILE ?? './.freerider-sessions.json';
 const HISTORY_FILE = process.env.HISTORY_FILE ?? './.freerider-history.json';
 const CONTROL_HOST = process.env.CONTROL_HOST ?? '0.0.0.0';
 const CONTROL_PORT = Number(process.env.CONTROL_PORT ?? 8787);
+const MAX_TRANSITIONS = 50;
 
 let sessionsCache;
 let historyCache;
+let firstPollWithSessions = true;
 
 function clampSeconds(value) {
   const number = Number(value);
@@ -104,7 +106,7 @@ function cityName(location) {
   return location?.city?.trim() || location?.name?.trim() || 'Unknown';
 }
 
-function makeHistoryRecord(route, now, countsTowardPatterns) {
+function historyRouteFields(route) {
   return {
     id: route.id,
     transportOfferId: route.transportOfferId,
@@ -121,18 +123,80 @@ function makeHistoryRecord(route, now, countsTowardPatterns) {
     latestReturn: route.latestReturn,
     expireTime: route.expireTime,
     carModel: route.carModel,
+  };
+}
+
+function makeHistoryRecord(route, now, countsTowardPatterns) {
+  return {
+    ...historyRouteFields(route),
     discoveredAt: now,
     firstSeenAt: now,
     lastSeenAt: now,
     updatedAt: now,
     status: 'active',
     countsTowardPatterns,
+    transitions: countsTowardPatterns
+      ? [{ at: now, status: 'active', kind: 'detected' }]
+      : [],
+    reappearanceCount: 0,
+    totalUnavailableMs: 0,
   };
 }
 
 function historyIsExpired(record, now) {
   const timestamp = Date.parse(record.expireTime);
   return Number.isFinite(timestamp) && now >= timestamp;
+}
+
+function historyStatusFor(present, expireTime, now) {
+  if (present) return 'active';
+  return historyIsExpired({ expireTime }, now) ? 'expired' : 'unavailable';
+}
+
+function applyHistoryTransition(record, status, now) {
+  if (record.status === status) return record;
+
+  const kind =
+    status === 'active'
+      ? record.transitions?.length
+        ? 'available-again'
+        : 'detected'
+      : status;
+
+  let reappearanceCount = record.reappearanceCount ?? 0;
+  let totalUnavailableMs = record.totalUnavailableMs ?? 0;
+  let lastUnavailableAt = record.lastUnavailableAt;
+  let lastReappearedAt = record.lastReappearedAt;
+
+  if (status === 'active') {
+    if (lastUnavailableAt) {
+      totalUnavailableMs += Math.max(0, now - lastUnavailableAt);
+      lastUnavailableAt = undefined;
+    }
+    if (kind === 'available-again') {
+      reappearanceCount += 1;
+      lastReappearedAt = now;
+    }
+  } else if (record.status === 'active') {
+    lastUnavailableAt = now;
+  }
+
+  const transitions = [
+    ...(Array.isArray(record.transitions) ? record.transitions : []),
+    { at: now, status, kind },
+  ].slice(-MAX_TRANSITIONS);
+
+  return {
+    ...record,
+    status,
+    disappearedAt: status === 'active' ? undefined : record.disappearedAt ?? now,
+    transitions,
+    reappearanceCount,
+    totalUnavailableMs,
+    lastUnavailableAt,
+    lastReappearedAt,
+    updatedAt: now,
+  };
 }
 
 async function readHistory() {
@@ -155,6 +219,7 @@ async function reconcileHistory(routes, now) {
   const history = await readHistory();
   const baseline = Object.keys(history).length === 0;
   const currentIds = new Set(routes.map((route) => route.id));
+  const reappearedIds = new Set();
   let changed = false;
 
   for (const route of routes) {
@@ -165,29 +230,35 @@ async function reconcileHistory(routes, now) {
       changed = true;
       continue;
     }
-    history[key] = {
+
+    const refreshed = {
       ...existing,
-      ...makeHistoryRecord(route, existing.discoveredAt, existing.countsTowardPatterns),
-      firstSeenAt: existing.firstSeenAt,
-      discoveredAt: existing.discoveredAt,
+      ...historyRouteFields(route),
+      firstSeenAt: existing.firstSeenAt ?? existing.discoveredAt ?? now,
+      discoveredAt: existing.discoveredAt ?? now,
       lastSeenAt: now,
-      disappearedAt: undefined,
       updatedAt: now,
-      status: 'active',
     };
+    const updated = applyHistoryTransition(refreshed, 'active', now);
+    if (updated !== refreshed && updated.transitions.length > refreshed.transitions.length) {
+      reappearedIds.add(route.id);
+    }
+    history[key] = updated;
     changed = true;
   }
 
-  for (const record of Object.values(history)) {
-    if (record.status !== 'active' || currentIds.has(record.id)) continue;
-    record.status = historyIsExpired(record, now) ? 'expired' : 'unavailable';
-    record.disappearedAt = now;
-    record.updatedAt = now;
-    changed = true;
+  // Re-check inactive rows too, so unavailable becomes expired once expireTime passes.
+  for (const [key, record] of Object.entries(history)) {
+    const nextStatus = historyStatusFor(currentIds.has(record.id), record.expireTime, now);
+    const updated = applyHistoryTransition(record, nextStatus, now);
+    if (updated !== record) {
+      history[key] = updated;
+      changed = true;
+    }
   }
 
   if (changed) await writeHistory(history);
-  return history;
+  return { history, reappearedIds };
 }
 
 async function readSessions() {
@@ -252,6 +323,9 @@ async function startSession(input) {
     existing.pollSeconds = pollSeconds;
     existing.expiresAt = expiresAt;
     existing.seenRouteIds = currentIds;
+    if (!Array.isArray(existing.notifiedReappearanceKeys)) {
+      existing.notifiedReappearanceKeys = [];
+    }
     await writeSessions(sessions);
     return publicSession(existing);
   }
@@ -266,6 +340,7 @@ async function startSession(input) {
     createdAt: now,
     expiresAt,
     seenRouteIds: currentIds,
+    notifiedReappearanceKeys: [],
   };
   sessions.push(session);
   await writeSessions(sessions);
@@ -292,13 +367,21 @@ async function listSessions(token) {
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-async function sendPush(token, matches) {
+async function sendPush(token, matches, kind = 'new') {
   const first = matches[0];
-  const title = matches.length === 1 ? 'New Freerider route' : `${matches.length} new Freerider routes`;
-  const body =
+  const availableAgain = kind === 'available-again';
+  const title = availableAgain
+    ? matches.length === 1
+      ? 'Freerider route available again'
+      : `${matches.length} Freerider routes available again`
+    : matches.length === 1
+      ? 'New Freerider route'
+      : `${matches.length} new Freerider routes`;
+  const summary =
     matches.length === 1
       ? `${first.pickupName} → ${first.returnName}`
       : `${first.pickupName} → ${first.returnName} and ${matches.length - 1} more`;
+  const body = availableAgain ? `Back: ${summary}` : summary;
 
   const response = await fetch(EXPO_PUSH_URL, {
     method: 'POST',
@@ -309,13 +392,37 @@ async function sendPush(token, matches) {
       body,
       sound: 'default',
       channelId: 'freerider',
-      data: { routeId: first.id, url: buildRouteUrl(first), matchCount: matches.length },
+      data: {
+        routeId: first.id,
+        url: buildRouteUrl(first),
+        matchCount: matches.length,
+        kind,
+      },
     }),
   });
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.errors?.length) {
     throw new Error(`Expo push failed: ${JSON.stringify(payload.errors ?? response.status)}`);
+  }
+}
+
+function addToGroup(grouped, token, route) {
+  const existing = grouped.get(token) ?? new Map();
+  if (!existing.has(route.id)) existing.set(route.id, route);
+  grouped.set(token, existing);
+}
+
+async function sendGroups(grouped, kind) {
+  for (const [token, routeMap] of grouped) {
+    const matches = [...routeMap.values()];
+    try {
+      await sendPush(token, matches, kind);
+      const suffix = kind === 'available-again' ? ' available again' : ' new';
+      console.log(`Sent alert for ${matches.length}${suffix} route(s).`);
+    } catch (error) {
+      console.error(`Push failed: ${error instanceof Error ? error.message : error}`);
+    }
   }
 }
 
@@ -326,9 +433,19 @@ async function pollOnce() {
 
   const now = Date.now();
   const routes = await fetchRoutes();
-  await reconcileHistory(routes, now);
+  const { history, reappearedIds } = await reconcileHistory(routes, now);
+  // A restart can find routes already back in the feed; log the change but don't alert for it.
+  const notifyReappeared = firstPollWithSessions ? new Set() : reappearedIds;
+  firstPollWithSessions = false;
   const currentIds = routes.map((route) => route.id);
-  const grouped = new Map();
+  const newGroups = new Map();
+  const againGroups = new Map();
+
+  const transitionAt = (routeId) => {
+    const record = history[String(routeId)];
+    const last = record?.transitions?.[record.transitions.length - 1];
+    return last?.at ?? now;
+  };
 
   for (const session of sessions) {
     const seen = new Set(
@@ -336,34 +453,39 @@ async function pollOnce() {
         ? session.seenRouteIds.filter((id) => typeof id === 'number')
         : [],
     );
-    const matches = routes.filter(
-      (route) =>
-        !seen.has(route.id) &&
-        matchesLocationQuery(route.pickupLocation, session.from) &&
-        matchesLocationQuery(route.returnLocation, session.to),
+    const matchesFilters = (route) =>
+      matchesLocationQuery(route.pickupLocation, session.from) &&
+      matchesLocationQuery(route.returnLocation, session.to);
+
+    // Reappearing routes get their own alert; exclude them from the new-route alert.
+    const newMatches = routes.filter(
+      (route) => !seen.has(route.id) && !notifyReappeared.has(route.id) && matchesFilters(route),
+    );
+    const againMatches = routes.filter(
+      (route) => notifyReappeared.has(route.id) && matchesFilters(route),
     );
 
     session.seenRouteIds = currentIds;
-    if (matches.length === 0) continue;
 
-    const existing = grouped.get(session.token) ?? new Map();
-    for (const route of matches) {
-      if (!existing.has(route.id)) existing.set(route.id, route);
+    const notified = new Set(
+      Array.isArray(session.notifiedReappearanceKeys)
+        ? session.notifiedReappearanceKeys.filter((key) => typeof key === 'string')
+        : [],
+    );
+    for (const route of againMatches) {
+      const key = `${route.id}:${transitionAt(route.id)}`;
+      if (notified.has(key)) continue;
+      notified.add(key);
+      addToGroup(againGroups, session.token, route);
     }
-    grouped.set(session.token, existing);
+    session.notifiedReappearanceKeys = [...notified].slice(-200);
+
+    for (const route of newMatches) addToGroup(newGroups, session.token, route);
   }
 
   await writeSessions(sessions);
-
-  for (const [token, routeMap] of grouped) {
-    const matches = [...routeMap.values()];
-    try {
-      await sendPush(token, matches);
-      console.log(`Sent alert for ${matches.length} new route(s).`);
-    } catch (error) {
-      console.error(`Push failed: ${error instanceof Error ? error.message : error}`);
-    }
-  }
+  await sendGroups(newGroups, 'new');
+  await sendGroups(againGroups, 'available-again');
 
   return Math.min(...sessions.map((session) => clampSeconds(session.pollSeconds)));
 }
