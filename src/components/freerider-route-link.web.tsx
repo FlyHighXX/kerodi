@@ -5,6 +5,10 @@ import { ExternalLink } from '@/components/external-link';
 
 type Props = {
   url: string;
+  /** Native WebView uses these to preselect the route; web opens the site as-is. */
+  pickupName?: string | null;
+  returnName?: string | null;
+  carModel?: string | null;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 };

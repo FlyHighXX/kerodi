@@ -20,7 +20,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useFreeriderFilters } from '@/hooks/use-freerider-filters';
 import { useFreeriderRoutes } from '@/hooks/use-freerider-routes';
 import {
-  buildFreeriderRouteUrl,
+  FREERIDER_SITE_URL,
   filterRoutes,
   formatDuration,
   formatLocalDateTime,
@@ -280,8 +280,13 @@ function RouteCard({
         </>
       ) : null}
 
-      <FreeriderRouteLink url={buildFreeriderRouteUrl(route)} style={styles.siteLink}>
-        <ThemedText type="linkPrimary">Open route on hertzfreerider.se</ThemedText>
+      <FreeriderRouteLink
+        url={FREERIDER_SITE_URL}
+        pickupName={route.pickupName}
+        returnName={route.returnName}
+        carModel={route.carModel}
+        style={styles.siteLink}>
+        <ThemedText type="linkPrimary">Book on hertzfreerider.se</ThemedText>
       </FreeriderRouteLink>
     </ThemedView>
   );

@@ -11,6 +11,7 @@ import { createServer } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
 
 const API_URL = 'https://hertzfreerider.se/api/transport-routes/';
+const SITE_URL = 'https://hertzfreerider.se/';
 const EXPO_PUSH_URL = process.env.EXPO_PUSH_URL ?? 'https://api.expo.dev/v2/push/send';
 const DEFAULT_POLL_SECONDS = clampSeconds(process.env.POLL_SECONDS ?? 10);
 const SESSIONS_FILE = process.env.SESSIONS_FILE ?? './.freerider-sessions.json';
@@ -72,13 +73,8 @@ function normalizeRoutes(groups) {
   return routes;
 }
 
-function buildRouteUrl(route) {
-  const timestamp = Date.parse(route.availableAt);
-  const params = [`id=${encodeURIComponent(String(route.id))}`];
-  if (Number.isFinite(timestamp)) {
-    params.push(`date=${encodeURIComponent(String(timestamp))}`);
-  }
-  return `https://hertzfreerider.se/booking-flow#${params.join('&')}`;
+function buildRouteUrl() {
+  return SITE_URL;
 }
 
 async function fetchRoutes() {
@@ -394,7 +390,7 @@ async function sendPush(token, matches, kind = 'new') {
       channelId: 'freerider',
       data: {
         routeId: first.id,
-        url: buildRouteUrl(first),
+        url: buildRouteUrl(),
         matchCount: matches.length,
         kind,
       },
