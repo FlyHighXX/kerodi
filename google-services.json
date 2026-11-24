@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "85612702349",
+    "project_id": "kerodi",
+    "storage_bucket": "kerodi.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:85612702349:android:2acf95eddc08412743d0c4",
+        "android_client_info": {
+          "package_name": "com.flyhighxx.kerodi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBI6RJkhMZYgxyh1izl11TLnvIK5snZcZ0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
