@@ -34,7 +34,18 @@ const SAME_WINDOW_POPUP_PATCH = `
   if (window.__kerodiSameWindowPopup) return true;
   window.__kerodiSameWindowPopup = true;
   window.open = function (url) {
-    if (url) window.location.assign(String(url));
+    if (url) {
+      // MSAL sets an "interaction in progress" marker before opening the
+      // popup. Since this tab becomes the popup, clear the marker so the
+      // redirect response can be processed on return.
+      for (var i = sessionStorage.length - 1; i >= 0; i -= 1) {
+        var key = sessionStorage.key(i);
+        if (key && (key.indexOf('msal') !== -1 || key.toLowerCase().indexOf('interaction') !== -1)) {
+          sessionStorage.removeItem(key);
+        }
+      }
+      window.location.assign(String(url));
+    }
     return window;
   };
   return true;
