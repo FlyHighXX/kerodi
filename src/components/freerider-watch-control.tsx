@@ -1,4 +1,4 @@
-import { router, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,7 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { readStoredFreeriderPushToken } from '@/lib/freerider-push';
+import { ensureFreeriderPushToken, readStoredFreeriderPushToken } from '@/lib/freerider-push';
 import {
   DURATION_PRESETS,
   formatDurationLabel,
@@ -77,28 +77,30 @@ export function FreeriderWatchControl({ from, to }: Props) {
   }, [load, pushToken]);
 
   const handleToggle = useCallback(async () => {
-    if (!pushToken) {
-      router.push('/settings');
-      return;
-    }
-
     setBusy(true);
     setError(null);
     try {
+      const activeToken = pushToken ?? (await ensureFreeriderPushToken());
+      if (!activeToken) {
+        setError('Allow notifications for Kerodi in system settings to start a listener.');
+        return;
+      }
+      setPushToken(activeToken);
+
       if (sessions.length === 0) {
-        await startFreeriderSession({ token: pushToken, from, to, durationMinutes });
+        await startFreeriderSession({ token: activeToken, from, to, durationMinutes });
       } else {
         const ordered = [...sessions].sort((a, b) => a.createdAt - b.createdAt);
         const last = ordered[ordered.length - 1];
-        if (last) await stopFreeriderSession(pushToken, last.id);
+        if (last) await stopFreeriderSession(activeToken, last.id);
       }
-      await refresh();
+      await load(activeToken);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not reach the worker.');
     } finally {
       setBusy(false);
     }
-  }, [durationMinutes, from, pushToken, refresh, sessions, to]);
+  }, [durationMinutes, from, load, pushToken, sessions, to]);
 
   const handleStopSession = useCallback(
     async (id: string) => {
@@ -157,12 +159,6 @@ export function FreeriderWatchControl({ from, to }: Props) {
 
         {busy ? <ActivityIndicator size="small" color={theme.textSecondary} /> : null}
       </View>
-
-      {!pushToken ? (
-        <Pressable onPress={() => router.push('/settings')} hitSlop={8}>
-          <ThemedText type="link">Turn on alerts in Settings</ThemedText>
-        </Pressable>
-      ) : null}
 
       {error ? (
         <ThemedText type="small" themeColor="textSecondary">

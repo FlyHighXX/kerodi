@@ -17,7 +17,6 @@ export const ROUTE_HISTORY_KEY = 'kerodi.freerider.route-history.v1';
 export const LOCATION_FILTERS_KEY = 'kerodi.freerider.location-filters.v1';
 export const POLL_SECONDS_KEY = 'kerodi.freerider.poll-seconds.v1';
 export const NOTIFIED_ROUTES_KEY = 'kerodi.freerider.notified.v1';
-export const NOTIFICATIONS_ENABLED_KEY = 'kerodi.freerider.notifications-enabled.v1';
 export const WORKER_URL_KEY = 'kerodi.freerider.worker-url.v1';
 
 export type FreerideLocation = {
