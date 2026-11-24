@@ -14,10 +14,12 @@ const API_URL = 'https://hertzfreerider.se/api/transport-routes/';
 const EXPO_PUSH_URL = process.env.EXPO_PUSH_URL ?? 'https://api.expo.dev/v2/push/send';
 const DEFAULT_POLL_SECONDS = clampSeconds(process.env.POLL_SECONDS ?? 10);
 const SESSIONS_FILE = process.env.SESSIONS_FILE ?? './.freerider-sessions.json';
+const HISTORY_FILE = process.env.HISTORY_FILE ?? './.freerider-history.json';
 const CONTROL_HOST = process.env.CONTROL_HOST ?? '0.0.0.0';
 const CONTROL_PORT = Number(process.env.CONTROL_PORT ?? 8787);
 
 let sessionsCache;
+let historyCache;
 
 function clampSeconds(value) {
   const number = Number(value);
@@ -90,6 +92,102 @@ async function fetchRoutes() {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function locationSearchText(location) {
+  return foldText(
+    `${location?.name ?? ''} ${location?.city ?? ''} ${location?.country ?? ''} ${location?.tracCode ?? ''}`,
+  );
+}
+
+function cityName(location) {
+  return location?.city?.trim() || location?.name?.trim() || 'Unknown';
+}
+
+function makeHistoryRecord(route, now, countsTowardPatterns) {
+  return {
+    id: route.id,
+    transportOfferId: route.transportOfferId,
+    pickupName: route.pickupName,
+    returnName: route.returnName,
+    fromCity: cityName(route.pickupLocation),
+    toCity: cityName(route.returnLocation),
+    fromSearchText: locationSearchText(route.pickupLocation),
+    toSearchText: locationSearchText(route.returnLocation),
+    country: route.pickupLocation.country ?? '',
+    distance: route.distance,
+    travelTime: route.travelTime,
+    availableAt: route.availableAt,
+    latestReturn: route.latestReturn,
+    expireTime: route.expireTime,
+    carModel: route.carModel,
+    discoveredAt: now,
+    firstSeenAt: now,
+    lastSeenAt: now,
+    updatedAt: now,
+    status: 'active',
+    countsTowardPatterns,
+  };
+}
+
+function historyIsExpired(record, now) {
+  const timestamp = Date.parse(record.expireTime);
+  return Number.isFinite(timestamp) && now >= timestamp;
+}
+
+async function readHistory() {
+  if (historyCache) return historyCache;
+  try {
+    const parsed = JSON.parse(await readFile(HISTORY_FILE, 'utf8'));
+    historyCache = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    historyCache = {};
+  }
+  return historyCache;
+}
+
+async function writeHistory(history) {
+  historyCache = history;
+  await writeFile(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
+}
+
+async function reconcileHistory(routes, now) {
+  const history = await readHistory();
+  const baseline = Object.keys(history).length === 0;
+  const currentIds = new Set(routes.map((route) => route.id));
+  let changed = false;
+
+  for (const route of routes) {
+    const key = String(route.id);
+    const existing = history[key];
+    if (!existing) {
+      history[key] = makeHistoryRecord(route, now, !baseline);
+      changed = true;
+      continue;
+    }
+    history[key] = {
+      ...existing,
+      ...makeHistoryRecord(route, existing.discoveredAt, existing.countsTowardPatterns),
+      firstSeenAt: existing.firstSeenAt,
+      discoveredAt: existing.discoveredAt,
+      lastSeenAt: now,
+      disappearedAt: undefined,
+      updatedAt: now,
+      status: 'active',
+    };
+    changed = true;
+  }
+
+  for (const record of Object.values(history)) {
+    if (record.status !== 'active' || currentIds.has(record.id)) continue;
+    record.status = historyIsExpired(record, now) ? 'expired' : 'unavailable';
+    record.disappearedAt = now;
+    record.updatedAt = now;
+    changed = true;
+  }
+
+  if (changed) await writeHistory(history);
+  return history;
 }
 
 async function readSessions() {
@@ -226,9 +324,10 @@ async function pollOnce() {
   await writeSessions(sessions);
   if (sessions.length === 0) return 2;
 
+  const now = Date.now();
   const routes = await fetchRoutes();
+  await reconcileHistory(routes, now);
   const currentIds = routes.map((route) => route.id);
-  const currentIdSet = new Set(currentIds);
   const grouped = new Map();
 
   for (const session of sessions) {
@@ -318,7 +417,11 @@ const server = createServer(async (request, response) => {
 
     if (request.method === 'POST' && url.pathname === '/status') {
       const token = typeof body.token === 'string' ? body.token.trim() : '';
-      sendJson(response, 200, { sessions: await listSessions(token) });
+      const since = Number(body.since) || 0;
+      const history = Object.values(await readHistory()).filter(
+        (record) => (record.updatedAt ?? 0) > since,
+      );
+      sendJson(response, 200, { sessions: await listSessions(token), history });
       return;
     }
 
@@ -341,7 +444,7 @@ process.on('SIGTERM', shutdown);
 server.listen(CONTROL_PORT, CONTROL_HOST, () => {
   console.log(
     `Freerider session worker listening on http://${CONTROL_HOST}:${CONTROL_PORT} ` +
-      `(poll default=${DEFAULT_POLL_SECONDS}s, sessions=${SESSIONS_FILE})`,
+      `(poll default=${DEFAULT_POLL_SECONDS}s, sessions=${SESSIONS_FILE}, history=${HISTORY_FILE})`,
   );
 });
 

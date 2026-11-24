@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { FreeriderHistorySheet } from '@/components/freerider-history-sheet';
 import { FreeriderRouteLink } from '@/components/freerider-route-link';
 import { FreeriderWatchControl } from '@/components/freerider-watch-control';
 import { ThemedText } from '@/components/themed-text';
@@ -25,6 +26,11 @@ import {
   formatLocalDateTime,
   type RouteOffer,
 } from '@/lib/freerider';
+import {
+  formatHistoryClock,
+  routeFromHistory,
+  type RouteHistoryRecord,
+} from '@/lib/freerider-history';
 
 function formatClock(timestamp: number) {
   return new Date(timestamp).toLocaleTimeString(undefined, {
@@ -37,6 +43,7 @@ export default function FreeriderScreen() {
   const theme = useTheme();
   const { fromQuery, toQuery } = useFreeriderFilters();
   const [newOnly, setNewOnly] = useState(false);
+  const [historyVisible, setHistoryVisible] = useState(false);
 
   const {
     routes,
@@ -45,21 +52,41 @@ export default function FreeriderScreen() {
     error,
     lastUpdated,
     newIds,
+    history,
     refresh,
     markAllSeen,
   } = useFreeriderRoutes();
 
   const newIdSet = useMemo(() => new Set(newIds), [newIds]);
+  const historyById = useMemo(
+    () => new Map(history.map((record) => [record.id, record])),
+    [history],
+  );
+  const activeIds = useMemo(() => new Set(routes.map((route) => route.id)), [routes]);
+  const inactiveRoutes = useMemo(
+    () =>
+      history
+        .filter((record) => record.status !== 'active' && !activeIds.has(record.id))
+        .map(routeFromHistory),
+    [activeIds, history],
+  );
   const filtered = useMemo(
-    () => filterRoutes(routes, fromQuery, toQuery, newOnly, newIdSet, newIds),
-    [fromQuery, newIdSet, newIds, newOnly, routes, toQuery],
+    () => [
+      ...filterRoutes(routes, fromQuery, toQuery, newOnly, newIdSet, newIds),
+      ...filterRoutes(inactiveRoutes, fromQuery, toQuery, newOnly, newIdSet, newIds),
+    ],
+    [fromQuery, inactiveRoutes, newIdSet, newIds, newOnly, routes, toQuery],
   );
 
   const renderItem = useCallback(
     ({ item }: { item: RouteOffer }) => (
-      <RouteCard route={item} isNew={newIdSet.has(item.id)} />
+      <RouteCard
+        route={item}
+        isNew={newIdSet.has(item.id)}
+        record={historyById.get(item.id)}
+      />
     ),
-    [newIdSet],
+    [historyById, newIdSet],
   );
 
   const filterSummary = [fromQuery ? `From ${fromQuery}` : null, toQuery ? `To ${toQuery}` : null]
@@ -76,6 +103,9 @@ export default function FreeriderScreen() {
             {lastUpdated ? `Updated ${formatClock(lastUpdated)}` : 'Not loaded yet'}
           </ThemedText>
           <View style={styles.statusActions}>
+            <Pressable onPress={() => setHistoryVisible(true)} hitSlop={8}>
+              <ThemedText type="link">History</ThemedText>
+            </Pressable>
             <Pressable
               onPress={() => void refresh({ force: true })}
               disabled={refreshing}
@@ -162,11 +192,33 @@ export default function FreeriderScreen() {
           showsVerticalScrollIndicator={false}
         />
       </SafeAreaView>
+
+      {historyVisible ? (
+        <FreeriderHistorySheet
+          key={`${fromQuery}|${toQuery}`}
+          records={history}
+          from={fromQuery}
+          to={toQuery}
+          now={lastUpdated ?? 0}
+          onClose={() => setHistoryVisible(false)}
+        />
+      ) : null}
     </ThemedView>
   );
 }
 
-function RouteCard({ route, isNew }: { route: RouteOffer; isNew: boolean }) {
+function RouteCard({
+  route,
+  isNew,
+  record,
+}: {
+  route: RouteOffer;
+  isNew: boolean;
+  record?: RouteHistoryRecord;
+}) {
+  const inactive = record?.status === 'unavailable' || record?.status === 'expired';
+  const badgeLabel = inactive ? record.status.toUpperCase() : isNew ? 'NEW' : null;
+
   return (
     <ThemedView type="backgroundElement" style={styles.routeCard}>
       <View style={styles.routeTop}>
@@ -178,9 +230,14 @@ function RouteCard({ route, isNew }: { route: RouteOffer; isNew: boolean }) {
             {route.carModel || 'Car on request'}
           </ThemedText>
         </View>
-        {isNew ? (
-          <View style={styles.badge}>
-            <ThemedText type="smallBold">NEW</ThemedText>
+        {badgeLabel ? (
+          <View
+            style={[
+              styles.badge,
+              record?.status === 'unavailable' && styles.badgeUnavailable,
+              record?.status === 'expired' && styles.badgeExpired,
+            ]}>
+            <ThemedText type="smallBold">{badgeLabel}</ThemedText>
           </View>
         ) : null}
       </View>
@@ -202,6 +259,17 @@ function RouteCard({ route, isNew }: { route: RouteOffer; isNew: boolean }) {
       <ThemedText type="small" themeColor="textSecondary">
         Return by {formatLocalDateTime(route.latestReturn)}
       </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Expires {formatLocalDateTime(route.expireTime)}
+      </ThemedText>
+      {record?.discoveredAt ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Detected {formatHistoryClock(record.discoveredAt)}
+          {record.status === 'active' || !record.disappearedAt
+            ? ''
+            : ` · Gone ${formatHistoryClock(record.disappearedAt)}`}
+        </ThemedText>
+      ) : null}
 
       <FreeriderRouteLink url={buildFreeriderRouteUrl(route)} style={styles.siteLink}>
         <ThemedText type="linkPrimary">Open route on hertzfreerider.se</ThemedText>
@@ -248,7 +316,9 @@ const styles = StyleSheet.create({
   statusActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
   },
   routesHeader: {
     flexDirection: 'row',
@@ -280,6 +350,12 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.half,
     borderRadius: Spacing.two,
     backgroundColor: '#FFCC00',
+  },
+  badgeUnavailable: {
+    backgroundColor: '#E8A33D',
+  },
+  badgeExpired: {
+    backgroundColor: '#8E8E93',
   },
   facts: {
     flexDirection: 'row',

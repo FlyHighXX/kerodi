@@ -6,6 +6,7 @@ Second-level alerts are sent by the tiny worker in `scripts/freerider-push-worke
 
 ```bash
 SESSIONS_FILE="./.freerider-sessions.json" \
+HISTORY_FILE="./.freerider-history.json" \
 POLL_SECONDS=10 \
 CONTROL_PORT=8787 \
 npm run freerider:worker
@@ -18,9 +19,11 @@ The worker listens on `0.0.0.0:8787` and exposes:
 | `GET` | `/health` | — | Health check |
 | `POST` | `/start` | `{ token, from, to, durationMinutes }` | Start a listener with a fresh baseline |
 | `POST` | `/stop` | `{ token, id }` | Stop one listener |
-| `POST` | `/status` | `{ token }` | List active listeners |
+| `POST` | `/status` | `{ token, since? }` | List active listeners and route history updated after `since` |
 
 Multiple listeners can run for the same token. One feed poll serves all active listeners, and matches are grouped into one push per user to avoid duplicates.
+
+While listeners are active, each poll also records detected route IDs in `HISTORY_FILE`. Routes that leave the feed are marked `unavailable` (or `expired` once their `expireTime` has passed). The app syncs those records through `/status` on each refresh and merges them into its local history, which powers the **History** sheet on the Freerider tab.
 
 ### Environment variables
 
@@ -28,6 +31,7 @@ Multiple listeners can run for the same token. One feed poll serves all active l
 |---|---|---|
 | `POLL_SECONDS` | `10` | Fallback/new-session interval |
 | `SESSIONS_FILE` | `./.freerider-sessions.json` | Session + seen-state file |
+| `HISTORY_FILE` | `./.freerider-history.json` | Detected-route history file |
 | `CONTROL_PORT` | `8787` | HTTP control port |
 | `CONTROL_HOST` | `0.0.0.0` | Bind address |
 | `EXPO_PUSH_URL` | Expo Push API | Override for testing |

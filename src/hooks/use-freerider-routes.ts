@@ -7,6 +7,13 @@ import {
   type FreerideLocation,
   type RouteOffer,
 } from '@/lib/freerider';
+import {
+  historyRecords,
+  readRouteHistory,
+  reconcileRouteHistory,
+  type RouteHistoryRecord,
+} from '@/lib/freerider-history';
+import { syncWorkerRouteHistory } from '@/lib/freerider-sessions';
 import { readSeenRouteIds, writeSeenRouteIds } from '@/lib/freerider-storage';
 
 const STALE_AFTER_MS = 30 * 1000;
@@ -27,6 +34,7 @@ export function useFreeriderRoutes() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [newIds, setNewIds] = useState<number[]>([]);
+  const [history, setHistory] = useState<RouteHistoryRecord[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   const seenRef = useRef<Set<number> | null>(null);
@@ -36,10 +44,11 @@ export function useFreeriderRoutes() {
   useEffect(() => {
     let active = true;
 
-    readSeenRouteIds()
-      .then((ids) => {
+    Promise.all([readSeenRouteIds(), readRouteHistory()])
+      .then(([ids, storedHistory]) => {
         if (!active) return;
         seenRef.current = ids;
+        setHistory(storedHistory);
       })
       .catch(() => {})
       .finally(() => {
@@ -83,19 +92,25 @@ export function useFreeriderRoutes() {
 
     try {
       const next = await fetchFreeriderRoutes(controller.signal);
+      const now = Date.now();
       const previous = seenRef.current;
       const appeared = previous ? next.filter((route) => !previous.has(route.id)) : [];
 
       seenRef.current = new Set(next.map((route) => route.id));
       setRoutes(next);
-      // Prepend so `newIds` doubles as a newest-first discovery order for the UI.
+      // Prepend so `newIds` doubles as a newest-first detection order for the UI.
       const appearedIds = appeared.map((route) => route.id);
       setNewIds((current) => [
         ...appearedIds,
         ...current.filter((id) => !appearedIds.includes(id)),
       ]);
 
-      const now = Date.now();
+      const localHistory = await reconcileRouteHistory(next, now);
+      setHistory(historyRecords(localHistory));
+      void syncWorkerRouteHistory()
+        .then(setHistory)
+        .catch(() => {});
+
       setLastUpdated(now);
       void writeSeenRouteIds(seenRef.current);
     } catch (cause) {
@@ -136,6 +151,7 @@ export function useFreeriderRoutes() {
     error,
     lastUpdated,
     newIds,
+    history,
     hydrated,
     refresh,
     markAllSeen,
