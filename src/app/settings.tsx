@@ -149,7 +149,7 @@ export default function SettingsScreen() {
 
   const saveWorkerUrl = useCallback(async () => {
     if (!isValidWorkerUrl(workerUrlDraft)) {
-      setWorkerUrlError('Enter a full URL, for example http://192.168.1.171:8787');
+      setWorkerUrlError('Enter a full URL, for example http://100.77.0.70:8787');
       return;
     }
     setWorkerUrlBusy(true);
@@ -289,13 +289,13 @@ export default function SettingsScreen() {
           <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText type="smallBold">Worker connection</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Address of the machine running the Freerider worker. Use its LAN address at home or
-              its VPN address when you are away.
+              Address of the machine running the Freerider worker. Use its Tailscale address when
+              you are away from home.
             </ThemedText>
             <TextInput
               value={workerUrlDraft}
               onChangeText={setWorkerUrlDraft}
-              placeholder="http://192.168.1.171:8787"
+              placeholder="http://100.77.0.70:8787"
               placeholderTextColor={theme.textSecondary}
               autoCorrect={false}
               autoCapitalize="none"
