@@ -1,48 +1,57 @@
 # Freerider push worker
 
-The app's background task is only a slow fallback. For second-level alerts, run the tiny worker in `scripts/freerider-push-worker.mjs` on any machine with Node 18+.
+Second-level alerts are sent by the tiny worker in `scripts/freerider-push-worker.mjs`. The app itself does not poll for alerts.
 
-## 1. Get the push token
-
-In the app, open the **Freerider** tab and turn on **New-route alerts**. With no worker endpoint configured, the app shows an Expo push token. Copy it.
-
-> This requires a native build with EAS push credentials configured. Expo Go cannot register a push token.
-
-## 2. Run the worker
+## 1. Run the worker
 
 ```bash
-EXPO_PUSH_TOKEN="ExponentPushToken[...]" \
-FROM="Stockholm" \
-TO="Göteborg" \
+SESSIONS_FILE="./.freerider-sessions.json" \
 POLL_SECONDS=10 \
+CONTROL_PORT=8787 \
 npm run freerider:worker
 ```
 
-The first run only saves a baseline of current route IDs to `.freerider-seen.json`; it does not notify. Later runs send one Expo push when a new route matches both filters.
+The worker listens on `0.0.0.0:8787` and exposes:
+
+| Method | Path | Body | Purpose |
+|---|---|---|---|
+| `GET` | `/health` | — | Health check |
+| `POST` | `/start` | `{ token, from, to, durationMinutes }` | Start a listener with a fresh baseline |
+| `POST` | `/stop` | `{ token, id }` | Stop one listener |
+| `POST` | `/status` | `{ token }` | List active listeners |
+
+Multiple listeners can run for the same token. One feed poll serves all active listeners, and matches are grouped into one push per user to avoid duplicates.
 
 ### Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `EXPO_PUSH_TOKEN` | required | Token shown in the app |
-| `FROM` | `''` | Pickup place substring; empty matches all |
-| `TO` | `''` | Return place substring; empty matches all |
-| `POLL_SECONDS` | `10` | Check interval |
-| `SEEN_FILE` | `./.freerider-seen.json` | Local state file |
+| `POLL_SECONDS` | `10` | Fallback/new-session interval |
+| `SESSIONS_FILE` | `./.freerider-sessions.json` | Session + seen-state file |
+| `CONTROL_PORT` | `8787` | HTTP control port |
+| `CONTROL_HOST` | `0.0.0.0` | Bind address |
 | `EXPO_PUSH_URL` | Expo Push API | Override for testing |
 
-`FROM`/`TO` use the same case- and diacritic-insensitive matching as the app, so `Göteborg` and `Goteborg` both work.
+## 2. App configuration
+
+The app talks to the worker at `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT`. It defaults to:
+
+```text
+http://192.168.1.39:8787
+```
+
+Set that environment variable at build time to use a different host.
+
+In the app:
+
+1. Open **Settings** and turn on **New-route alerts** to register a push token.
+2. Set From/To filters in Settings.
+3. On the Freerider tab, tap **Start** next to the hidden duration control.
+4. Use `1h ▾` to choose the listener duration.
+5. Tap **listening** to see and stop active listeners.
+
+Starting a listener saves a baseline of current route IDs, so existing routes do not trigger alerts. The listener expires automatically when its duration ends.
 
 ## 3. Notification tap
 
-Tapping the push opens the app on the Freerider tab, where the matching route is marked **NEW**.
-
-## Optional: auto-upload token and filters
-
-If you set:
-
-```bash
-EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT=https://your-endpoint.example/freerider/preferences
-```
-
-the app POSTs `{ token, from, to }` there when alerts are enabled or filters change. That endpoint is intentionally not included in this minimal single-user setup; the worker above reads its config from environment variables.
+Tapping the push opens the Freerider tab.

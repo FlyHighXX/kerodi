@@ -1,4 +1,4 @@
-export const FREERIDER_PUSH_ENDPOINT = '';
+export const FREERIDER_PUSH_ENDPOINT = 'http://192.168.1.39:8787';
 export const FREERIDER_NOTIFICATION_CHANNEL = 'freerider';
 
 export async function registerFreeriderPushToken() {

@@ -12,8 +12,9 @@ import {
 const PUSH_TOKEN_KEY = 'kerodi.freerider.push-token.v1';
 export const FREERIDER_NOTIFICATION_CHANNEL = 'freerider';
 
-/** Optional endpoint that receives { token, from, to } when filters change. */
-export const FREERIDER_PUSH_ENDPOINT = process.env.EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT?.trim() ?? '';
+/** Control API for starting/stopping worker listeners. */
+const configuredEndpoint = process.env.EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT?.trim();
+export const FREERIDER_PUSH_ENDPOINT = configuredEndpoint || 'http://192.168.1.39:8787';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

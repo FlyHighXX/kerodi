@@ -46,6 +46,7 @@ example
 
 # Freerider push worker state
 .freerider-seen.json
+.freerider-sessions.json
 
 # Firebase private key (google-services.json is public-facing and may be committed)
 *service-account*.json

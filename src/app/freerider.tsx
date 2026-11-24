@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FreeriderRouteLink } from '@/components/freerider-route-link';
+import { FreeriderWatchControl } from '@/components/freerider-watch-control';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -67,6 +68,8 @@ export default function FreeriderScreen() {
 
   const listHeader = (
     <View style={styles.listHeader}>
+      <FreeriderWatchControl from={fromQuery} to={toQuery} />
+
       <ThemedView type="backgroundElement" style={styles.statusCard}>
         <View style={styles.rowBetween}>
           <ThemedText type="small" themeColor="textSecondary">
