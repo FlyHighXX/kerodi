@@ -33,6 +33,9 @@ export default function AppTabs() {
           <TabTrigger name="freerider" href="/freerider" asChild>
             <TabButton>Freerider</TabButton>
           </TabTrigger>
+          <TabTrigger name="settings" href="/settings" asChild>
+            <TabButton>Settings</TabButton>
+          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>

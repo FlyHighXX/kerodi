@@ -40,6 +40,11 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Label>Freerider</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="car.fill" md="directions_car" />
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="settings">
+        <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="gear" md="settings" />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

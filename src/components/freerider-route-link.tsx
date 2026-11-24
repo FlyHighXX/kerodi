@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -23,6 +23,32 @@ type Props = {
   style?: StyleProp<ViewStyle>;
 };
 
+const SITE_ROOT = FREERIDER_SITE_URL.replace(/\/$/, '');
+
+// MSAL opens the B2C sign-in page with window.open(). A plain Android WebView
+// puts that popup in a window nobody renders, so the login appears frozen.
+// Redirecting popups into this WebView keeps the session and makes the buttons
+// usable. The guard makes the patch safe to inject on every navigation.
+const SAME_WINDOW_POPUP_PATCH = `
+(function () {
+  if (window.__kerodiSameWindowPopup) return true;
+  window.__kerodiSameWindowPopup = true;
+  window.open = function (url) {
+    if (url) window.location.assign(String(url));
+    return window;
+  };
+  return true;
+})();
+`;
+
+function isSiteRoot(url: string) {
+  return url.split(/[?#]/)[0].replace(/\/$/, '') === SITE_ROOT;
+}
+
+function hasMsalResponse(url: string) {
+  return /[#&](?:code|id_token|error|state)=/i.test(url);
+}
+
 /**
  * Opens the booking page in a persistent in-app WebView. The site's MSAL cache
  * lives in that WebView, so signing in once is enough for later routes.
@@ -32,29 +58,74 @@ export function FreeriderRouteLink({ url, children, style }: Props) {
   const [visible, setVisible] = useState(false);
   const [currentUrl, setCurrentUrl] = useState(url);
   const [loading, setLoading] = useState(true);
-  const redirectedAfterLogin = useRef(false);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
+  const webViewRef = useRef<WebView | null>(null);
+  const authReturnPending = useRef(false);
+  const restoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearRestoreTimer = useCallback(() => {
+    if (restoreTimer.current) {
+      clearTimeout(restoreTimer.current);
+      restoreTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearRestoreTimer, [clearRestoreTimer]);
+
+  const close = useCallback(() => {
+    clearRestoreTimer();
+    authReturnPending.current = false;
+    setVisible(false);
+  }, [clearRestoreTimer]);
 
   const open = () => {
+    clearRestoreTimer();
     setCurrentUrl(url);
-    redirectedAfterLogin.current = false;
+    authReturnPending.current = false;
+    setCanGoBack(false);
+    setCanGoForward(false);
     setLoading(true);
     setVisible(true);
   };
 
-  const shouldStartLoad = (request: WebViewNavigation) => {
-    // The B2C redirect points back to "/", which loses the route hash. Once
-    // the session exists, bounce back to the selected route.
-    const requestPath = request.url.split(/[?#]/)[0].replace(/\/$/, '');
-    if (
-      !redirectedAfterLogin.current &&
-      requestPath === FREERIDER_SITE_URL.replace(/\/$/, '')
-    ) {
-      redirectedAfterLogin.current = true;
-      setCurrentUrl(url);
-      return false;
+  const shouldStartLoad = useCallback((request: WebViewNavigation) => {
+    // B2C returns to "/" with the MSAL response in the hash. Remember that so
+    // we can restore the selected route after MSAL has consumed the response.
+    if (isSiteRoot(request.url) && hasMsalResponse(request.url)) {
+      authReturnPending.current = true;
     }
     return true;
-  };
+  }, []);
+
+  const handleLoadEnd = useCallback(
+    (event: { nativeEvent: { url: string } }) => {
+      setLoading(false);
+      if (!authReturnPending.current || !isSiteRoot(event.nativeEvent.url)) return;
+
+      authReturnPending.current = false;
+      clearRestoreTimer();
+      restoreTimer.current = setTimeout(() => {
+        restoreTimer.current = null;
+        setCurrentUrl(url);
+      }, 1200);
+    },
+    [clearRestoreTimer, url],
+  );
+
+  const handleNavigationStateChange = useCallback((nav: WebViewNavigation) => {
+    setCanGoBack(nav.canGoBack);
+    setCanGoForward(nav.canGoForward);
+  }, []);
+
+  const handleOpenWindow = useCallback((event: { nativeEvent: { targetUrl?: string } }) => {
+    const targetUrl = event.nativeEvent.targetUrl;
+    if (!targetUrl) return;
+    if (isSiteRoot(targetUrl) && hasMsalResponse(targetUrl)) {
+      authReturnPending.current = true;
+    }
+    setCurrentUrl(targetUrl);
+  }, []);
 
   return (
     <>
@@ -68,28 +139,64 @@ export function FreeriderRouteLink({ url, children, style }: Props) {
         visible={visible}
         animationType="slide"
         presentationStyle="fullScreen"
-        onRequestClose={() => setVisible(false)}>
+        onRequestClose={() => {
+          if (canGoBack) webViewRef.current?.goBack();
+          else close();
+        }}>
         <ThemedView style={styles.container}>
-          <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+          <SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'left', 'right']}>
             <View style={styles.bar}>
-              <Pressable onPress={() => setVisible(false)} hitSlop={8} style={styles.close}>
+              <Pressable onPress={close} hitSlop={8}>
                 <ThemedText type="link">Close</ThemedText>
               </Pressable>
-              <ThemedText type="small" themeColor="textSecondary">
-                hertzfreerider.se
-              </ThemedText>
+              <View style={styles.navGroup}>
+                <Pressable
+                  onPress={() => webViewRef.current?.goBack()}
+                  disabled={!canGoBack}
+                  hitSlop={8}
+                  style={!canGoBack && styles.disabled}>
+                  <ThemedText type="small">← Back</ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => webViewRef.current?.goForward()}
+                  disabled={!canGoForward}
+                  hitSlop={8}
+                  style={!canGoForward && styles.disabled}>
+                  <ThemedText type="small">Forward →</ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => webViewRef.current?.reload()}
+                  hitSlop={8}>
+                  <ThemedText type="small">Reload</ThemedText>
+                </Pressable>
+                <Pressable onPress={() => setCurrentUrl(url)} hitSlop={8}>
+                  <ThemedText type="small">Route</ThemedText>
+                </Pressable>
+              </View>
             </View>
 
             <WebView
+              ref={webViewRef}
               source={{ uri: currentUrl }}
               style={[styles.webview, { backgroundColor: theme.background }]}
               javaScriptEnabled
               domStorageEnabled
               cacheEnabled
               incognito={false}
+              sharedCookiesEnabled
+              thirdPartyCookiesEnabled
+              allowsFullscreenVideo
+              allowsInlineMediaPlayback
+              mediaPlaybackRequiresUserAction={false}
+              setSupportMultipleWindows={false}
+              injectedJavaScriptBeforeContentLoaded={SAME_WINDOW_POPUP_PATCH}
+              injectedJavaScript={SAME_WINDOW_POPUP_PATCH}
+              onMessage={() => {}}
               onLoadStart={() => setLoading(true)}
-              onLoadEnd={() => setLoading(false)}
+              onLoadEnd={handleLoadEnd}
               onShouldStartLoadWithRequest={shouldStartLoad}
+              onNavigationStateChange={handleNavigationStateChange}
+              onOpenWindow={handleOpenWindow}
             />
 
             {loading ? (
@@ -117,11 +224,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: Spacing.two,
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.two,
   },
-  close: {
-    paddingVertical: Spacing.one,
+  navGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: Spacing.three,
   },
   webview: {
     flex: 1,
@@ -134,6 +246,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  disabled: {
+    opacity: 0.35,
   },
   pressed: {
     opacity: 0.7,
