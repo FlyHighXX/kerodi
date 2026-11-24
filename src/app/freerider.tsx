@@ -34,7 +34,7 @@ function formatClock(timestamp: number) {
 
 export default function FreeriderScreen() {
   const theme = useTheme();
-  const { pollSeconds, fromQuery, toQuery } = useFreeriderFilters();
+  const { fromQuery, toQuery } = useFreeriderFilters();
   const [newOnly, setNewOnly] = useState(false);
 
   const {
@@ -46,7 +46,7 @@ export default function FreeriderScreen() {
     newIds,
     refresh,
     markAllSeen,
-  } = useFreeriderRoutes({ pollIntervalMs: pollSeconds * 1000 });
+  } = useFreeriderRoutes();
 
   const newIdSet = useMemo(() => new Set(newIds), [newIds]);
   const filtered = useMemo(
@@ -128,7 +128,7 @@ export default function FreeriderScreen() {
         <View style={styles.header}>
           <ThemedText type="subtitle">Freerider</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Hertz routes, filtered and watched for changes
+            Hertz routes. Alerts are sent by the worker.
           </ThemedText>
         </View>
 

@@ -15,40 +15,24 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFreeriderFilters } from '@/hooks/use-freerider-filters';
 import {
-  BACKGROUND_MIN_INTERVAL_MINUTES,
-  disableFreeriderNotifications,
-  enableFreeriderNotifications,
-  syncFreeriderNotificationState,
-} from '@/lib/freerider-background-task';
-import {
   fetchFreeriderLocations,
   matchesLocationQuery,
   type FreerideLocation,
 } from '@/lib/freerider';
 import {
+  disableFreeriderPushAlerts,
+  enableFreeriderPushAlerts,
   FREERIDER_PUSH_ENDPOINT,
   readStoredFreeriderPushToken,
-  registerFreeriderPushToken,
+  syncFreeriderPushAlertState,
   syncFreeriderPushPreferences,
   uploadFreeriderPushPreferences,
 } from '@/lib/freerider-push';
 
-const POLL_PRESETS = [5, 15, 60, 120];
-
 export default function SettingsScreen() {
   const theme = useTheme();
-  const {
-    pollSeconds,
-    pollDraft,
-    setPollDraft,
-    setPollSeconds,
-    commitPollDraft,
-    fromQuery,
-    setFromQuery,
-    toQuery,
-    setToQuery,
-    clearLocations,
-  } = useFreeriderFilters();
+  const { fromQuery, setFromQuery, toQuery, setToQuery, clearLocations } =
+    useFreeriderFilters();
 
   const [locations, setLocations] = useState<FreerideLocation[]>([]);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
@@ -70,7 +54,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     let active = true;
-    syncFreeriderNotificationState()
+    syncFreeriderPushAlertState()
       .then((enabled) => {
         if (active) setAlertsEnabled(enabled);
       })
@@ -111,27 +95,22 @@ export default function SettingsScreen() {
     setAlertsError(null);
     try {
       if (alertsEnabled) {
-        await disableFreeriderNotifications();
+        await disableFreeriderPushAlerts();
         setAlertsEnabled(false);
       } else {
-        const enabled = await enableFreeriderNotifications();
-        setAlertsEnabled(enabled);
-        if (!enabled) {
+        const token = await enableFreeriderPushAlerts();
+        setAlertsEnabled(Boolean(token));
+        if (!token) {
           setAlertsError(
-            'Allow notifications and background activity for Kerodi in system settings, then try again.',
+            'Allow notifications for Kerodi in system settings, then try again.',
           );
           return;
         }
 
-        try {
-          const token = await registerFreeriderPushToken();
-          setPushToken(token);
-          if (token && FREERIDER_PUSH_ENDPOINT) {
-            const ok = await uploadFreeriderPushPreferences(token);
-            setAlertsError(ok ? null : 'Push alerts enabled, but the worker could not be reached.');
-          }
-        } catch {
-          setAlertsError('Push alerts enabled, but this device could not register a token.');
+        setPushToken(token);
+        if (FREERIDER_PUSH_ENDPOINT) {
+          const ok = await uploadFreeriderPushPreferences(token);
+          setAlertsError(ok ? null : 'Push alerts enabled, but the worker could not be reached.');
         }
       }
     } catch {
@@ -140,11 +119,6 @@ export default function SettingsScreen() {
       setAlertsBusy(false);
     }
   }, [alertsBusy, alertsEnabled]);
-
-  const choosePreset = useCallback(
-    (seconds: number) => setPollSeconds(seconds),
-    [setPollSeconds],
-  );
 
   return (
     <ThemedView style={styles.container}>
@@ -193,55 +167,6 @@ export default function SettingsScreen() {
           </ThemedView>
 
           <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="smallBold" themeColor="textSecondary">
-              AUTO REFRESH
-            </ThemedText>
-            <View style={styles.pollRow}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Poll every
-              </ThemedText>
-              <TextInput
-                value={pollDraft}
-                onChangeText={setPollDraft}
-                onBlur={commitPollDraft}
-                onSubmitEditing={commitPollDraft}
-                keyboardType="number-pad"
-                returnKeyType="done"
-                maxLength={4}
-                accessibilityLabel="Polling interval in seconds"
-                style={[styles.secondsInput, { backgroundColor: theme.background, color: theme.text }]}
-              />
-              <ThemedText type="small" themeColor="textSecondary">
-                seconds while the Freerider tab is open
-              </ThemedText>
-            </View>
-            <View style={styles.chipRow}>
-              {POLL_PRESETS.map((seconds) => {
-                const active = seconds === pollSeconds;
-                return (
-                  <Pressable
-                    key={seconds}
-                    onPress={() => choosePreset(seconds)}
-                    style={({ pressed }) => [
-                      styles.chip,
-                      { backgroundColor: active ? theme.backgroundSelected : theme.background },
-                      pressed && styles.pressed,
-                    ]}>
-                    <ThemedText type="small" themeColor={active ? 'text' : 'textSecondary'}>
-                      {seconds}s
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <ThemedText type="small" themeColor="textSecondary">
-              {pollSeconds < 15
-                ? 'Short intervals send more requests to hertzfreerider.se.'
-                : 'New offers are marked as they appear.'}
-            </ThemedText>
-          </ThemedView>
-
-          <ThemedView type="backgroundElement" style={styles.card}>
             <View style={styles.rowBetween}>
               <ThemedText type="smallBold">New-route alerts</ThemedText>
               <Pressable
@@ -260,9 +185,7 @@ export default function SettingsScreen() {
             </View>
             <ThemedText type="small" themeColor="textSecondary">
               {alertsEnabled
-                ? FREERIDER_PUSH_ENDPOINT
-                  ? 'Fast push alerts follow your From/To search. A slow background check is kept as a fallback.'
-                  : `Background checks follow your From/To search (about every ${BACKGROUND_MIN_INTERVAL_MINUTES} min). Add a worker URL for second-level push alerts.`
+                ? 'Push alerts are sent by the worker whenever a new route matches your From/To search.'
                 : 'Get a notification when a new route matches your From/To search.'}
             </ThemedText>
             {alertsEnabled && pushToken && !FREERIDER_PUSH_ENDPOINT ? (
@@ -396,30 +319,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.two,
-  },
-  pollRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-  },
-  secondsInput: {
-    width: 64,
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.two,
-    borderRadius: Spacing.two,
-    fontSize: 15,
-    textAlign: 'center',
-  },
-  chipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-  },
-  chip: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
   },
   button: {
     paddingVertical: Spacing.two,
