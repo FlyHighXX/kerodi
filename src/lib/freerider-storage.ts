@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   LOCATION_FILTERS_KEY,
+  NEW_ROUTES_KEY,
   NOTIFIED_ROUTES_KEY,
   POLL_SECONDS_KEY,
   SEEN_ROUTES_KEY,
@@ -47,12 +48,25 @@ export async function writeNumberSet(key: string, ids: Iterable<number>) {
   } catch {}
 }
 
+export async function readNumberList(key: string): Promise<number[]> {
+  const parsed = await readJson(key);
+  return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : [];
+}
+
 export async function readSeenRouteIds() {
   return readNumberSet(SEEN_ROUTES_KEY);
 }
 
 export async function writeSeenRouteIds(ids: Iterable<number>) {
   await writeNumberSet(SEEN_ROUTES_KEY, ids);
+}
+
+export async function readNewRouteIds() {
+  return readNumberList(NEW_ROUTES_KEY);
+}
+
+export async function writeNewRouteIds(ids: Iterable<number>) {
+  await writeNumberSet(NEW_ROUTES_KEY, ids);
 }
 
 export async function readNotifiedRouteIds() {

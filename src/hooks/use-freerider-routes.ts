@@ -14,7 +14,12 @@ import {
   type RouteHistoryRecord,
 } from '@/lib/freerider-history';
 import { syncWorkerRouteHistory } from '@/lib/freerider-sessions';
-import { readSeenRouteIds, writeSeenRouteIds } from '@/lib/freerider-storage';
+import {
+  readNewRouteIds,
+  readSeenRouteIds,
+  writeNewRouteIds,
+  writeSeenRouteIds,
+} from '@/lib/freerider-storage';
 
 const STALE_AFTER_MS = 30 * 1000;
 const REQUEST_TIMEOUT_MS = 15 * 1000;
@@ -38,16 +43,21 @@ export function useFreeriderRoutes() {
   const [hydrated, setHydrated] = useState(false);
 
   const seenRef = useRef<Set<number> | null>(null);
+  const newIdsRef = useRef<number[]>([]);
+  const baselineRef = useRef(false);
   const lastAttemptRef = useRef(0);
   const inFlightRef = useRef(false);
 
   useEffect(() => {
     let active = true;
 
-    Promise.all([readSeenRouteIds(), readRouteHistory()])
-      .then(([ids, storedHistory]) => {
+    Promise.all([readSeenRouteIds(), readRouteHistory(), readNewRouteIds()])
+      .then(([ids, storedHistory, storedNewIds]) => {
         if (!active) return;
         seenRef.current = ids;
+        newIdsRef.current = storedNewIds;
+        baselineRef.current = storedHistory.length === 0;
+        setNewIds(storedNewIds);
         setHistory(storedHistory);
       })
       .catch(() => {})
@@ -94,16 +104,26 @@ export function useFreeriderRoutes() {
       const next = await fetchFreeriderRoutes(controller.signal);
       const now = Date.now();
       const previous = seenRef.current;
-      const appeared = previous ? next.filter((route) => !previous.has(route.id)) : [];
+      // The first feed load is a baseline; routes present then are not "new".
+      const appeared =
+        previous && !baselineRef.current
+          ? next.filter((route) => !previous.has(route.id))
+          : [];
+      baselineRef.current = false;
+      const currentIds = new Set(next.map((route) => route.id));
 
-      seenRef.current = new Set(next.map((route) => route.id));
+      seenRef.current = new Set(currentIds);
       setRoutes(next);
       // Prepend so `newIds` doubles as a newest-first detection order for the UI.
+      // Keep unread ids across app updates, but drop routes that left the feed.
       const appearedIds = appeared.map((route) => route.id);
-      setNewIds((current) => [
+      const mergedNewIds = [
         ...appearedIds,
-        ...current.filter((id) => !appearedIds.includes(id)),
-      ]);
+        ...newIdsRef.current.filter((id) => currentIds.has(id) && !appearedIds.includes(id)),
+      ];
+      newIdsRef.current = mergedNewIds;
+      setNewIds(mergedNewIds);
+      void writeNewRouteIds(mergedNewIds);
 
       const localHistory = await reconcileRouteHistory(next, now);
       setHistory(historyRecords(localHistory));
@@ -131,8 +151,10 @@ export function useFreeriderRoutes() {
 
   const markAllSeen = useCallback(() => {
     seenRef.current = new Set(routes.map((route) => route.id));
+    newIdsRef.current = [];
     setNewIds([]);
     void writeSeenRouteIds(seenRef.current);
+    void writeNewRouteIds([]);
   }, [routes]);
 
   // Fetch once when the tab becomes visible. Pull-to-refresh and "Check now"
