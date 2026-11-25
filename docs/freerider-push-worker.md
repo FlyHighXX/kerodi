@@ -20,11 +20,11 @@ The worker listens on `0.0.0.0:8787` and exposes:
 |---|---|---|---|
 | `GET` | `/health` | — | Health check |
 | `POST` | `/` | `{ token, from, to }` | Legacy preferences ack from Settings; does not start a listener |
-| `POST` | `/start` | `{ token, from, to, durationMinutes }` | Start a listener with a fresh baseline |
+| `POST` | `/start` | `{ token, from, to, durationMinutes, excludeCountry? }` | Start a listener with a fresh baseline |
 | `POST` | `/stop` | `{ token, id }` | Stop one listener |
 | `POST` | `/status` | `{ token, since? }` | List active listeners and route history updated after `since` |
 
-Multiple listeners can run for the same token. One feed poll serves all active listeners, and matches are grouped into one push per user to avoid duplicates.
+Multiple listeners can run for the same token. One feed poll serves all active listeners, and matches are grouped into one push per user to avoid duplicates. `excludeCountry` (for example `"NO"`) suppresses alerts for routes whose pickup or return country matches, and is also returned in `/status` so the app can keep active listeners in sync with the setting.
 
 While listeners are active, each poll also records detected route IDs in `HISTORY_FILE`. Routes that leave the feed are marked `unavailable` (or `expired` once their `expireTime` has passed). The app syncs those records through `/status` on each refresh and merges them into its local history, which powers the **History** sheet on the Freerider tab.
 

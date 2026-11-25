@@ -19,6 +19,7 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFreeriderFilters } from '@/hooks/use-freerider-filters';
 import { useFreeriderRoutes } from '@/hooks/use-freerider-routes';
+import { useFreeriderViewSettings } from '@/hooks/use-freerider-view-settings';
 import {
   FREERIDER_SITE_URL,
   filterRoutes,
@@ -43,6 +44,7 @@ function formatClock(timestamp: number) {
 export default function FreeriderScreen() {
   const theme = useTheme();
   const { fromQuery, toQuery } = useFreeriderFilters();
+  const { showUnavailable, showExpired, excludeNorway } = useFreeriderViewSettings();
   const [newOnly, setNewOnly] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
 
@@ -59,25 +61,60 @@ export default function FreeriderScreen() {
   } = useFreeriderRoutes();
 
   const newIdSet = useMemo(() => new Set(newIds), [newIds]);
-  const historyById = useMemo(
-    () => new Map(history.map((record) => [record.id, record])),
-    [history],
+  const isExcludedCountry = useCallback(
+    (country?: string | null) => excludeNorway && (country ?? '').trim().toUpperCase() === 'NO',
+    [excludeNorway],
   );
-  const activeIds = useMemo(() => new Set(routes.map((route) => route.id)), [routes]);
-  const inactiveRoutes = useMemo(
+
+  const visibleHistory = useMemo(
     () =>
-      history
-        .filter((record) => record.status !== 'active' && !activeIds.has(record.id))
-        .map(routeFromHistory),
-    [activeIds, history],
+      history.filter(
+        (record) => !isExcludedCountry(record.country) && !isExcludedCountry(record.returnCountry),
+      ),
+    [history, isExcludedCountry],
   );
+  const historyById = useMemo(
+    () => new Map(visibleHistory.map((record) => [record.id, record])),
+    [visibleHistory],
+  );
+  const activeRoutes = useMemo(
+    () =>
+      routes.filter(
+        (route) =>
+          !isExcludedCountry(route.pickupLocation.country) &&
+          !isExcludedCountry(route.returnLocation.country),
+      ),
+    [isExcludedCountry, routes],
+  );
+  const activeIds = useMemo(() => new Set(activeRoutes.map((route) => route.id)), [activeRoutes]);
+  const inactiveRoutes = useMemo(() => {
+    if (!showUnavailable && !showExpired) return [];
+    return visibleHistory
+      .filter((record) => {
+        if (activeIds.has(record.id) || record.status === 'active') return false;
+        if (record.status === 'unavailable') return showUnavailable;
+        if (record.status === 'expired') return showExpired;
+        return false;
+      })
+      .map(routeFromHistory);
+  }, [activeIds, showExpired, showUnavailable, visibleHistory]);
   const filtered = useMemo(
     () => [
-      ...filterRoutes(routes, fromQuery, toQuery, newOnly, newIdSet, newIds),
+      ...filterRoutes(activeRoutes, fromQuery, toQuery, newOnly, newIdSet, newIds, 'location'),
       ...filterRoutes(inactiveRoutes, fromQuery, toQuery, newOnly, newIdSet, newIds),
     ],
-    [fromQuery, inactiveRoutes, newIdSet, newIds, newOnly, routes, toQuery],
+    [activeRoutes, fromQuery, inactiveRoutes, newIdSet, newIds, newOnly, toQuery],
   );
+  const hiddenInactive = useMemo(() => {
+    let unavailable = 0;
+    let expired = 0;
+    for (const record of visibleHistory) {
+      if (activeIds.has(record.id) || record.status === 'active') continue;
+      if (record.status === 'unavailable' && !showUnavailable) unavailable += 1;
+      if (record.status === 'expired' && !showExpired) expired += 1;
+    }
+    return { unavailable, expired };
+  }, [activeIds, showExpired, showUnavailable, visibleHistory]);
 
   const renderItem = useCallback(
     ({ item }: { item: RouteOffer }) => (
@@ -90,7 +127,11 @@ export default function FreeriderScreen() {
     [historyById, newIdSet],
   );
 
-  const filterSummary = [fromQuery ? `From ${fromQuery}` : null, toQuery ? `To ${toQuery}` : null]
+  const filterSummary = [
+    fromQuery ? `From ${fromQuery}` : null,
+    toQuery ? `To ${toQuery}` : null,
+    excludeNorway ? 'NO excluded' : null,
+  ]
     .filter(Boolean)
     .join(' · ');
 
@@ -125,6 +166,11 @@ export default function FreeriderScreen() {
         {filterSummary ? (
           <ThemedText type="small" themeColor="textSecondary">
             {filterSummary}
+          </ThemedText>
+        ) : null}
+        {hiddenInactive.unavailable + hiddenInactive.expired > 0 ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            Hidden: {hiddenInactive.unavailable} unavailable · {hiddenInactive.expired} expired
           </ThemedText>
         ) : null}
         {error ? (
@@ -197,7 +243,7 @@ export default function FreeriderScreen() {
       {historyVisible ? (
         <FreeriderHistorySheet
           key={`${fromQuery}|${toQuery}`}
-          records={history}
+          records={visibleHistory}
           from={fromQuery}
           to={toQuery}
           now={lastUpdated ?? 0}

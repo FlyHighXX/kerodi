@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFreeriderFilters } from '@/hooks/use-freerider-filters';
+import { useFreeriderViewSettings } from '@/hooks/use-freerider-view-settings';
 import {
   fetchFreeriderLocations,
   matchesLocationQuery,
@@ -24,6 +25,14 @@ export default function SettingsScreen() {
   const theme = useTheme();
   const { fromQuery, setFromQuery, toQuery, setToQuery, clearLocations } =
     useFreeriderFilters();
+  const {
+    showUnavailable,
+    setShowUnavailable,
+    showExpired,
+    setShowExpired,
+    excludeNorway,
+    setExcludeNorway,
+  } = useFreeriderViewSettings();
 
   const [locations, setLocations] = useState<FreerideLocation[]>([]);
   const [workerUrlDraft, setWorkerUrlDraft] = useState('');
@@ -156,6 +165,25 @@ export default function SettingsScreen() {
           </ThemedView>
 
           <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedText type="smallBold">Route list</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Available routes are sorted A–Z by pickup location, then return location. New
+              detections stay pinned to the top.
+            </ThemedText>
+            <ToggleRow
+              label="Show unavailable routes"
+              value={showUnavailable}
+              onChange={setShowUnavailable}
+            />
+            <ToggleRow label="Show expired routes" value={showExpired} onChange={setShowExpired} />
+            <ToggleRow
+              label="Exclude Norway (NO)"
+              value={excludeNorway}
+              onChange={setExcludeNorway}
+            />
+          </ThemedView>
+
+          <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText type="smallBold">Worker connection</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               Address of the machine running the Freerider worker. Use its Tailscale address when
@@ -211,6 +239,36 @@ export default function SettingsScreen() {
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+function ToggleRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={styles.toggleRow}>
+      <ThemedText type="small" themeColor="textSecondary">
+        {label}
+      </ThemedText>
+      <Pressable
+        onPress={() => onChange(!value)}
+        style={({ pressed }) => [
+          styles.toggleButton,
+          { backgroundColor: value ? theme.backgroundSelected : theme.background },
+          pressed && styles.pressed,
+        ]}>
+        <ThemedText type="smallBold" themeColor={value ? 'text' : 'textSecondary'}>
+          {value ? 'On' : 'Off'}
+        </ThemedText>
+      </Pressable>
+    </View>
   );
 }
 
@@ -333,6 +391,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  toggleButton: {
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Spacing.four,
   },
   tokenBlock: {
     gap: Spacing.half,

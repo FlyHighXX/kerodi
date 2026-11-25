@@ -28,6 +28,8 @@ export type RouteHistoryRecord = {
   fromSearchText: string;
   toSearchText: string;
   country: string;
+  /** Older stored records predate this field. */
+  returnCountry?: string;
   distance: number;
   travelTime: number;
   availableAt: string;
@@ -102,6 +104,7 @@ function routeFields(route: RouteOffer) {
     fromSearchText: locationSearchText(route.pickupLocation),
     toSearchText: locationSearchText(route.returnLocation),
     country: route.pickupLocation.country ?? '',
+    returnCountry: route.returnLocation.country ?? '',
     distance: route.distance,
     travelTime: route.travelTime,
     availableAt: route.availableAt,

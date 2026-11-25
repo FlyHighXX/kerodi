@@ -67,6 +67,7 @@ function normalizeRoutes(groups) {
         ...route,
         pickupName: route.pickupLocation.name?.trim() || group.pickupLocationName || 'Unknown pickup',
         returnName: route.returnLocation.name?.trim() || group.returnLocationName || 'Unknown return',
+        country: route.pickupLocation.country ?? '',
       });
     }
   }
@@ -285,6 +286,7 @@ function publicSession(session) {
     id: session.id,
     from: session.from,
     to: session.to,
+    excludeCountry: session.excludeCountry ?? '',
     pollSeconds: session.pollSeconds,
     durationMinutes: session.durationMinutes,
     createdAt: session.createdAt,
@@ -298,6 +300,8 @@ async function startSession(input) {
 
   const from = typeof input.from === 'string' ? input.from.trim() : '';
   const to = typeof input.to === 'string' ? input.to.trim() : '';
+  const excludeCountry =
+    typeof input.excludeCountry === 'string' ? input.excludeCountry.trim().toUpperCase() : '';
   const durationMinutes = clampMinutes(input.durationMinutes ?? 60);
   const pollSeconds = clampSeconds(input.pollSeconds ?? DEFAULT_POLL_SECONDS);
 
@@ -318,6 +322,7 @@ async function startSession(input) {
     existing.durationMinutes = durationMinutes;
     existing.pollSeconds = pollSeconds;
     existing.expiresAt = expiresAt;
+    existing.excludeCountry = excludeCountry;
     existing.seenRouteIds = currentIds;
     if (!Array.isArray(existing.notifiedReappearanceKeys)) {
       existing.notifiedReappearanceKeys = [];
@@ -331,6 +336,7 @@ async function startSession(input) {
     token,
     from,
     to,
+    excludeCountry,
     durationMinutes,
     pollSeconds,
     createdAt: now,
@@ -449,9 +455,17 @@ async function pollOnce() {
         ? session.seenRouteIds.filter((id) => typeof id === 'number')
         : [],
     );
-    const matchesFilters = (route) =>
-      matchesLocationQuery(route.pickupLocation, session.from) &&
-      matchesLocationQuery(route.returnLocation, session.to);
+    const excludedCountry = (session.excludeCountry ?? '').trim().toUpperCase();
+    const matchesFilters = (route) => {
+      const pickupCountry = (route.pickupLocation.country ?? '').trim().toUpperCase();
+      const returnCountry = (route.returnLocation.country ?? '').trim().toUpperCase();
+      return (
+        (!excludedCountry ||
+          (pickupCountry !== excludedCountry && returnCountry !== excludedCountry)) &&
+        matchesLocationQuery(route.pickupLocation, session.from) &&
+        matchesLocationQuery(route.returnLocation, session.to)
+      );
+    };
 
     // Reappearing routes get their own alert; exclude them from the new-route alert.
     const newMatches = routes.filter(
