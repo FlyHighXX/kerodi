@@ -20,6 +20,7 @@ import {
   writeNewRouteIds,
   writeSeenRouteIds,
 } from '@/lib/freerider-storage';
+import { translate } from '@/lib/i18n';
 
 const STALE_AFTER_MS = 30 * 1000;
 const REQUEST_TIMEOUT_MS = 15 * 1000;
@@ -136,10 +137,10 @@ export function useFreeriderRoutes() {
     } catch (cause) {
       setError(
         controller.signal.aborted
-          ? 'The request timed out. Check your connection and try again.'
+          ? translate('The request timed out. Check your connection and try again.')
           : cause instanceof Error
             ? cause.message
-            : 'Could not load routes.',
+            : translate('Could not load routes.'),
       );
     } finally {
       clearTimeout(timeout);

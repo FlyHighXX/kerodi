@@ -50,6 +50,15 @@
             "usesCleartextTraffic": true
           }
         }
+      ],
+      [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": ["en", "sv"],
+            "android": ["en", "sv"]
+          }
+        }
       ]
     ],
     "experiments": {

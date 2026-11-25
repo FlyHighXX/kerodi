@@ -22,6 +22,7 @@ import {
   listTopPairs,
   type RouteHistoryRecord,
 } from '@/lib/freerider-history';
+import { useI18n } from '@/providers/locale-provider';
 
 type Props = {
   records: RouteHistoryRecord[];
@@ -43,6 +44,7 @@ function statusLabel(status: RouteHistoryRecord['status']) {
 
 export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props) {
   const theme = useTheme();
+  const { t } = useI18n();
   const [fromDraft, setFromDraft] = useState(from);
   const [toDraft, setToDraft] = useState(to);
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -60,15 +62,16 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <ThemedView type="backgroundElement" style={styles.sheet}>
           <View style={styles.rowBetween}>
-            <ThemedText type="subtitle">Route history</ThemedText>
+            <ThemedText type="subtitle">{t('Route history')}</ThemedText>
             <Pressable onPress={onClose} hitSlop={8}>
-              <ThemedText type="link">Close</ThemedText>
+              <ThemedText type="link">{t('Close')}</ThemedText>
             </Pressable>
           </View>
 
           <ThemedText type="small" themeColor="textSecondary">
-            Times are when Kerodi detected the route, to the minute. Routes present at first
-            launch are marked Baseline because their true detection time is unknown.
+            {t(
+              'Times are when Kerodi detected the route, to the minute. Routes present at first launch are marked Baseline because their true detection time is unknown.',
+            )}
           </ThemedText>
 
           <ScrollView
@@ -79,14 +82,14 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
               <TextInput
                 value={fromDraft}
                 onChangeText={setFromDraft}
-                placeholder="From"
+                placeholder={t('From')}
                 placeholderTextColor={theme.textSecondary}
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
               />
               <TextInput
                 value={toDraft}
                 onChangeText={setToDraft}
-                placeholder="To"
+                placeholder={t('To')}
                 placeholderTextColor={theme.textSecondary}
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
               />
@@ -94,36 +97,45 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
 
             <ThemedView type="background" style={styles.card}>
               <ThemedText type="smallBold">
-                {summary.from || 'Any'} → {summary.to || 'Any'}
+                {summary.from || t('Any')} → {summary.to || t('Any')}
               </ThemedText>
               {summary.total === 0 ? (
                 <ThemedText type="small" themeColor="textSecondary">
-                  No detected posts for this pair yet.
+                  {t('No detected posts for this pair yet.')}
                 </ThemedText>
               ) : (
                 <>
                   <ThemedText type="small" themeColor="textSecondary">
-                    {summary.total} detected · {summary.perWeek.toFixed(1)} per week
+                    {t('{{count}} detected · {{rate}} per week', {
+                      count: summary.total,
+                      rate: summary.perWeek.toFixed(1),
+                    })}
                   </ThemedText>
                   {summary.reappearances > 0 ? (
                     <ThemedText type="small" themeColor="textSecondary">
-                      {summary.reappearances} reappearances recorded
+                      {t('{{count}} reappearances recorded', { count: summary.reappearances })}
                     </ThemedText>
                   ) : null}
                   {summary.busiestWeekday ? (
                     <ThemedText type="small" themeColor="textSecondary">
-                      Busiest day {summary.busiestWeekday.label} ·{' '}
-                      {percent(summary.busiestWeekday.share)}
+                      {t('Busiest day {{day}} · {{percent}}', {
+                        day: summary.busiestWeekday.label,
+                        percent: percent(summary.busiestWeekday.share),
+                      })}
                     </ThemedText>
                   ) : null}
                   {summary.busiestHour ? (
                     <ThemedText type="small" themeColor="textSecondary">
-                      Busiest hour {summary.busiestHour.label} ·{' '}
-                      {percent(summary.busiestHour.share)}
+                      {t('Busiest hour {{hour}} · {{percent}}', {
+                        hour: summary.busiestHour.label,
+                        percent: percent(summary.busiestHour.share),
+                      })}
                     </ThemedText>
                   ) : null}
                   <ThemedText type="small" themeColor="textSecondary">
-                    Last detected {formatHistoryDateClock(summary.lastAt)}
+                    {t('Last detected {{time}}', {
+                      time: formatHistoryDateClock(summary.lastAt),
+                    })}
                   </ThemedText>
                 </>
               )}
@@ -131,7 +143,7 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
 
             {topPairs.length > 0 ? (
               <ThemedView type="background" style={styles.card}>
-                <ThemedText type="smallBold">Most seen pairs</ThemedText>
+                <ThemedText type="smallBold">{t('Most seen pairs')}</ThemedText>
                 {topPairs.map((pair) => (
                   <Pressable
                     key={`${pair.fromKey}|${pair.toKey}`}
@@ -152,13 +164,13 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
             ) : null}
 
             <ThemedView type="background" style={styles.card}>
-              <ThemedText type="smallBold">Recent routes</ThemedText>
+              <ThemedText type="smallBold">{t('Recent routes')}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                Tap a route to see its state changes.
+                {t('Tap a route to see its state changes.')}
               </ThemedText>
               {recent.length === 0 ? (
                 <ThemedText type="small" themeColor="textSecondary">
-                  Nothing recorded yet.
+                  {t('Nothing recorded yet.')}
                 </ThemedText>
               ) : (
                 recent.map((record) => {
@@ -177,13 +189,15 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
                           {formatDetectionText(record)}
                           {record.status === 'active' || !record.disappearedAt
                             ? ''
-                            : ` · ${statusLabel(record.status)} ${formatHistoryClock(record.disappearedAt)}`}
+                            : ` · ${t(statusLabel(record.status))} ${formatHistoryClock(record.disappearedAt)}`}
                         </ThemedText>
                         {record.reappearanceCount ? (
                           <ThemedText type="small" themeColor="textSecondary">
-                            Seen again {record.reappearanceCount}×
+                            {t('Seen again {{count}}×', { count: record.reappearanceCount })}
                             {record.lastReappearedAt
-                              ? ` · Last ${formatHistoryClock(record.lastReappearedAt)}`
+                              ? t(' · Last {{time}}', {
+                                  time: formatHistoryClock(record.lastReappearedAt),
+                                })
                               : ''}
                           </ThemedText>
                         ) : null}
@@ -192,7 +206,7 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
                         <View style={[styles.timeline, { borderLeftColor: theme.backgroundSelected }]}>
                           {transitions.length === 0 ? (
                             <ThemedText type="small" themeColor="textSecondary">
-                              No state changes recorded yet.
+                              {t('No state changes recorded yet.')}
                             </ThemedText>
                           ) : (
                             transitions.map((transition, index) => (
@@ -206,7 +220,9 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
                           )}
                           {record.totalUnavailableMs ? (
                             <ThemedText type="small" themeColor="textSecondary">
-                              Total unavailable {formatDurationMs(record.totalUnavailableMs)}
+                              {t('Total unavailable {{duration}}', {
+                                duration: formatDurationMs(record.totalUnavailableMs),
+                              })}
                             </ThemedText>
                           ) : null}
                         </View>

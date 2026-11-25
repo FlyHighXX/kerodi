@@ -6,6 +6,7 @@ import {
   type RouteHistoryRecord,
 } from '@/lib/freerider-history';
 import { readWorkerUrl } from '@/lib/freerider-worker-url';
+import { translate } from '@/lib/i18n';
 
 const CACHE_KEY = 'kerodi.freerider.sessions.v1';
 const DURATION_KEY = 'kerodi.freerider.watch-duration-minutes.v1';
@@ -52,7 +53,7 @@ export async function checkWorkerHealth() {
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const endpoint = await readWorkerUrl();
-  if (!endpoint) throw new Error('Set the worker URL in Settings first.');
+  if (!endpoint) throw new Error(translate('Set the worker URL in Settings first.'));
 
   const response = await fetch(`${endpoint}${path}`, {
     method: 'POST',
@@ -61,7 +62,9 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.error) {
-    throw new Error(payload.error || `Worker returned ${response.status}`);
+    throw new Error(
+      payload.error || translate('Worker returned {{status}}', { status: response.status }),
+    );
   }
   return payload as T;
 }
@@ -146,8 +149,9 @@ export function formatDurationLabel(minutes: number) {
 
 export function formatRemaining(expiresAt: number, now: number) {
   const minutes = Math.max(0, Math.ceil((expiresAt - now) / 60_000));
-  if (minutes < 60) return `${minutes}m left`;
+  if (minutes < 60) return translate('{{duration}} left', { duration: `${minutes}m` });
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest === 0 ? `${hours}h left` : `${hours}h ${rest}m left`;
+  const duration = rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+  return translate('{{duration}} left', { duration });
 }

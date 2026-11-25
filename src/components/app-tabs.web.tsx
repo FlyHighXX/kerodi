@@ -14,27 +14,30 @@ import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useI18n } from '@/providers/locale-provider';
 
 export default function AppTabs() {
+  const { t } = useI18n();
+
   return (
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="home" href="/" asChild>
-            <TabButton>Home</TabButton>
+            <TabButton>{t('Home')}</TabButton>
           </TabTrigger>
           <TabTrigger name="notes" href="/notes" asChild>
-            <TabButton>Notes</TabButton>
+            <TabButton>{t('Notes')}</TabButton>
           </TabTrigger>
           <TabTrigger name="insights" href="/insights" asChild>
-            <TabButton>Insights</TabButton>
+            <TabButton>{t('Insights')}</TabButton>
           </TabTrigger>
           <TabTrigger name="freerider" href="/freerider" asChild>
             <TabButton>Freerider</TabButton>
           </TabTrigger>
           <TabTrigger name="settings" href="/settings" asChild>
-            <TabButton>Settings</TabButton>
+            <TabButton>{t('Settings')}</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -57,6 +60,7 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
 }
 
 export function CustomTabList(props: TabListProps) {
+  const { t } = useI18n();
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
 
@@ -71,7 +75,7 @@ export function CustomTabList(props: TabListProps) {
 
         <ExternalLink href="https://docs.expo.dev" asChild>
           <Pressable style={styles.externalPressable}>
-            <ThemedText type="link">Docs</ThemedText>
+            <ThemedText type="link">{t('Docs')}</ThemedText>
             <SymbolView
               tintColor={colors.text}
               name={{ ios: 'arrow.up.right.square', web: 'link' }}

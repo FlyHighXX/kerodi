@@ -7,6 +7,7 @@ import {
   type FreerideLocation,
   type RouteOffer,
 } from '@/lib/freerider';
+import { translate } from '@/lib/i18n';
 
 export type RouteStatus = 'active' | 'unavailable' | 'expired';
 
@@ -370,7 +371,11 @@ export function buildPairPatternSummary(
   const firstAt = total ? Math.min(...discovered) : null;
   const lastAt = total ? Math.max(...discovered) : null;
   const weeks = firstAt ? Math.max(1, (now - firstAt) / WEEK_MS) : 1;
-  const weekdays = bucketCounts(discovered, (value) => WEEKDAYS[new Date(value).getDay()], total);
+  const weekdays = bucketCounts(
+    discovered,
+    (value) => translate(WEEKDAYS[new Date(value).getDay()]),
+    total,
+  );
   const hours = bucketCounts(
     discovered,
     (value) => `${String(new Date(value).getHours()).padStart(2, '0')}:00`,
@@ -427,8 +432,8 @@ export function formatHistoryClock(timestamp: number | null | undefined) {
 
 /** Baseline rows existed at first launch, so their detection time is unknown. */
 export function formatDetectionText(record: RouteHistoryRecord) {
-  if (record.countsTowardPatterns === false) return 'Baseline · time unknown';
-  return `Detected ${formatHistoryClock(record.discoveredAt)}`;
+  if (record.countsTowardPatterns === false) return translate('Baseline · time unknown');
+  return translate('Detected {{time}}', { time: formatHistoryClock(record.discoveredAt) });
 }
 
 export function formatHistoryDateClock(timestamp: number | null | undefined) {
@@ -442,25 +447,31 @@ export function formatHistoryDateClock(timestamp: number | null | undefined) {
 }
 
 export function formatDurationMs(duration: number | null | undefined) {
-  if (!duration || duration <= 0) return '0m';
+  if (!duration || duration <= 0) return translate('0m');
   const minutes = Math.round(duration / 60_000);
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60) return translate('{{count}}m', { count: minutes });
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
-  if (hours < 24) return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+  if (hours < 24) {
+    return remainder
+      ? translate('{{hours}}h {{minutes}}m', { hours, minutes: remainder })
+      : translate('{{count}}h', { count: hours });
+  }
   const days = Math.floor(hours / 24);
   const dayHours = hours % 24;
-  return dayHours ? `${days}d ${dayHours}h` : `${days}d`;
+  return dayHours
+    ? translate('{{days}}d {{hours}}h', { days, hours: dayHours })
+    : translate('{{count}}d', { count: days });
 }
 
 export function formatTransitionText(transition: RouteTransition) {
-  const label =
+  const key =
     transition.kind === 'available-again'
-      ? 'Available again'
+      ? 'Available again {{time}}'
       : transition.kind === 'detected'
-        ? 'Detected'
+        ? 'Detected {{time}}'
         : transition.status === 'unavailable'
-          ? 'Unavailable'
-          : 'Expired';
-  return `${label} ${formatHistoryClock(transition.at)}`;
+          ? 'Unavailable {{time}}'
+          : 'Expired {{time}}';
+  return translate(key, { time: formatHistoryClock(transition.at) });
 }

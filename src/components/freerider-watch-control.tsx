@@ -25,6 +25,7 @@ import {
   writeSelectedDuration,
   type FreeriderSession,
 } from '@/lib/freerider-sessions';
+import { useI18n } from '@/providers/locale-provider';
 
 type Props = {
   from: string;
@@ -33,6 +34,7 @@ type Props = {
 
 export function FreeriderWatchControl({ from, to }: Props) {
   const theme = useTheme();
+  const { t } = useI18n();
   const { excludeNorway } = useFreeriderViewSettings();
   const syncingExclusionRef = useRef(false);
   const [pushToken, setPushToken] = useState<string | null>(null);
@@ -111,7 +113,7 @@ export function FreeriderWatchControl({ from, to }: Props) {
     try {
       const activeToken = pushToken ?? (await ensureFreeriderPushToken());
       if (!activeToken) {
-        setError('Allow notifications for Kerodi in system settings to start a listener.');
+        setError(t('Allow notifications for Kerodi in system settings to start a listener.'));
         return;
       }
       setPushToken(activeToken);
@@ -131,11 +133,11 @@ export function FreeriderWatchControl({ from, to }: Props) {
       }
       await load(activeToken);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not reach the worker.');
+      setError(cause instanceof Error ? cause.message : t('Could not reach the worker.'));
     } finally {
       setBusy(false);
     }
-  }, [durationMinutes, excludeNorway, from, load, pushToken, sessions, to]);
+  }, [durationMinutes, excludeNorway, from, load, pushToken, sessions, t, to]);
 
   const handleStopSession = useCallback(
     async (id: string) => {
@@ -146,12 +148,12 @@ export function FreeriderWatchControl({ from, to }: Props) {
         await stopFreeriderSession(pushToken, id);
         await refresh();
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : 'Could not reach the worker.');
+        setError(cause instanceof Error ? cause.message : t('Could not reach the worker.'));
       } finally {
         setBusy(false);
       }
     },
-    [pushToken, refresh],
+    [pushToken, refresh, t],
   );
 
   const chooseDuration = useCallback(async (minutes: number) => {
@@ -174,7 +176,7 @@ export function FreeriderWatchControl({ from, to }: Props) {
             busy && styles.disabled,
             pressed && styles.pressed,
           ]}>
-          <ThemedText type="smallBold">{sessions.length > 0 ? 'Stop' : 'Start'}</ThemedText>
+          <ThemedText type="smallBold">{sessions.length > 0 ? t('Stop') : t('Start')}</ThemedText>
         </Pressable>
 
         <Pressable
@@ -188,7 +190,9 @@ export function FreeriderWatchControl({ from, to }: Props) {
 
         {sessions.length > 0 ? (
           <Pressable onPress={() => setSessionsVisible(true)} hitSlop={8}>
-            <ThemedText type="link">{sessions.length} listening</ThemedText>
+            <ThemedText type="link">
+              {t('{{count}} listening', { count: sessions.length })}
+            </ThemedText>
           </Pressable>
         ) : null}
 
@@ -208,7 +212,7 @@ export function FreeriderWatchControl({ from, to }: Props) {
         onRequestClose={() => setDurationVisible(false)}>
         <Pressable style={styles.backdrop} onPress={() => setDurationVisible(false)}>
           <ThemedView type="backgroundElement" style={styles.sheet}>
-            <ThemedText type="smallBold">Listen for</ThemedText>
+            <ThemedText type="smallBold">{t('Listen for')}</ThemedText>
             {DURATION_PRESETS.map((minutes) => (
               <Pressable
                 key={minutes}
@@ -228,12 +232,12 @@ export function FreeriderWatchControl({ from, to }: Props) {
         onRequestClose={() => setSessionsVisible(false)}>
         <Pressable style={styles.backdrop} onPress={() => setSessionsVisible(false)}>
           <ThemedView type="backgroundElement" style={styles.sheet}>
-            <ThemedText type="smallBold">Active listeners</ThemedText>
+            <ThemedText type="smallBold">{t('Active listeners')}</ThemedText>
             {orderedSessions.map((session) => (
               <View key={session.id} style={styles.sessionRow}>
                 <View style={styles.sessionCopy}>
                   <ThemedText type="smallBold">
-                    {session.from || 'Any'} → {session.to || 'Any'}
+                    {session.from || t('Any')} → {session.to || t('Any')}
                   </ThemedText>
                   <ThemedText type="small" themeColor="textSecondary">
                     {formatRemaining(session.expiresAt, now)}
@@ -243,7 +247,7 @@ export function FreeriderWatchControl({ from, to }: Props) {
                   onPress={() => void handleStopSession(session.id)}
                   disabled={busy}
                   hitSlop={8}>
-                  <ThemedText type="link">Stop</ThemedText>
+                  <ThemedText type="link">{t('Stop')}</ThemedText>
                 </Pressable>
               </View>
             ))}

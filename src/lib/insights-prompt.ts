@@ -23,6 +23,20 @@ export const DEFAULT_INSTRUCTIONS = [
   'the reader directly as "you".',
 ].join('\n');
 
+/** Bundled Swedish default persona, used when the app locale is Swedish. */
+export const DEFAULT_INSTRUCTIONS_SV = [
+  'Du är en noggrann, stödjande assistent för välmående. Du får ta del av en persons privata dagboksanteckningar.',
+  '',
+  'Identifiera återkommande teman och mönster som är relevanta för deras välmående. Var varsam och icke-diagnostiserande:',
+  'du lyfter fram mönster, ger aldrig medicinsk rådgivning. Skriv på enkel, varm och neutral svenska och tilltala',
+  'läsaren direkt med "du".',
+].join('\n');
+
+/** The default persona for the given app locale. */
+export function defaultInstructionsFor(locale: string): string {
+  return locale === 'sv' ? DEFAULT_INSTRUCTIONS_SV : DEFAULT_INSTRUCTIONS;
+}
+
 /**
  * The fixed output contract. Appended to the persona automatically and never
  * shown as editable, so every response can be parsed and validated.
@@ -44,8 +58,8 @@ export const OUTPUT_CONTRACT = [
  * Combine the user's (or default) instructions with the fixed output contract.
  * Blank or whitespace-only instructions fall back to the default.
  */
-export function buildSystemPrompt(instructions?: string | null): string {
-  const persona = (instructions ?? '').trim() || DEFAULT_INSTRUCTIONS;
+export function buildSystemPrompt(instructions?: string | null, locale = 'en'): string {
+  const persona = (instructions ?? '').trim() || defaultInstructionsFor(locale);
   return `${persona}\n\n${OUTPUT_CONTRACT}`;
 }
 

@@ -13,6 +13,8 @@
  * caller. That keeps it safe to import from a server route as well.
  */
 
+import { deviceLocale, translate } from '@/lib/i18n';
+
 import {
   PROVIDERS,
   detectProviderFromKey,
@@ -102,16 +104,16 @@ export async function analyzeNotesDirect(
     .slice(0, MAX_NOTES);
 
   if (usable.length === 0) {
-    throw new Error('No notes to analyse.');
+    throw new Error(translate('No notes to analyse.'));
   }
 
   const text = await runProvider(
-    { system: buildSystemPrompt(instructions), user: buildUserPrompt(usable) },
+    { system: buildSystemPrompt(instructions, deviceLocale()), user: buildUserPrompt(usable) },
     config,
   );
   const insight = normalizeInsight(extractJson(text), usable.length, id, meta.model);
   if (!insight) {
-    throw new Error('The AI returned an unexpected response format.');
+    throw new Error(translate('The AI returned an unexpected response format.'));
   }
   return insight;
 }
