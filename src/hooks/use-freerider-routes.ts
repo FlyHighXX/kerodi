@@ -8,12 +8,12 @@ import {
   type RouteOffer,
 } from '@/lib/freerider';
 import {
-  historyRecords,
-  readRouteHistory,
-  reconcileRouteHistory,
+  clearLocalRouteHistory,
+  latestHistoryUpdatedAt,
+  mergeWorkerHistory,
   type RouteHistoryRecord,
 } from '@/lib/freerider-history';
-import { syncWorkerRouteHistory } from '@/lib/freerider-sessions';
+import { fetchWorkerRouteHistory } from '@/lib/freerider-sessions';
 import {
   readNewRouteIds,
   readSeenRouteIds,
@@ -45,6 +45,8 @@ export function useFreeriderRoutes() {
 
   const seenRef = useRef<Set<number> | null>(null);
   const newIdsRef = useRef<number[]>([]);
+  const historyRef = useRef<RouteHistoryRecord[]>([]);
+  const historyUpdatedAtRef = useRef(0);
   const baselineRef = useRef(false);
   const lastAttemptRef = useRef(0);
   const inFlightRef = useRef(false);
@@ -52,14 +54,14 @@ export function useFreeriderRoutes() {
   useEffect(() => {
     let active = true;
 
-    Promise.all([readSeenRouteIds(), readRouteHistory(), readNewRouteIds()])
-      .then(([ids, storedHistory, storedNewIds]) => {
+    Promise.all([readSeenRouteIds(), readNewRouteIds()])
+      .then(([ids, storedNewIds]) => {
         if (!active) return;
         seenRef.current = ids;
         newIdsRef.current = storedNewIds;
-        baselineRef.current = storedHistory.length === 0;
+        baselineRef.current = ids.size === 0;
         setNewIds(storedNewIds);
-        setHistory(storedHistory);
+        void clearLocalRouteHistory();
       })
       .catch(() => {})
       .finally(() => {
@@ -102,7 +104,12 @@ export function useFreeriderRoutes() {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const next = await fetchFreeriderRoutes(controller.signal);
+      const [routesResult, historyResult] = await Promise.allSettled([
+        fetchFreeriderRoutes(controller.signal),
+        fetchWorkerRouteHistory(historyUpdatedAtRef.current, controller.signal),
+      ]);
+      if (routesResult.status === 'rejected') throw routesResult.reason;
+      const next = routesResult.value;
       const now = Date.now();
       const previous = seenRef.current;
       // The first feed load is a baseline; routes present then are not "new".
@@ -126,11 +133,16 @@ export function useFreeriderRoutes() {
       setNewIds(mergedNewIds);
       void writeNewRouteIds(mergedNewIds);
 
-      const localHistory = await reconcileRouteHistory(next, now);
-      setHistory(historyRecords(localHistory));
-      void syncWorkerRouteHistory()
-        .then(setHistory)
-        .catch(() => {});
+      if (historyResult.status === 'fulfilled') {
+        const incoming = historyResult.value;
+        const merged = mergeWorkerHistory(historyRef.current, incoming);
+        historyRef.current = merged;
+        historyUpdatedAtRef.current = Math.max(
+          historyUpdatedAtRef.current,
+          latestHistoryUpdatedAt(incoming),
+        );
+        setHistory(merged);
+      }
 
       setLastUpdated(now);
       void writeSeenRouteIds(seenRef.current);

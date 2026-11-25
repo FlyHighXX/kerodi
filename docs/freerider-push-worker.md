@@ -22,11 +22,12 @@ The worker listens on `0.0.0.0:8787` and exposes:
 | `POST` | `/` | `{ token, from, to }` | Legacy preferences ack from Settings; does not start a listener |
 | `POST` | `/start` | `{ token, from, to, durationMinutes, excludeCountry? }` | Start a listener with a fresh baseline |
 | `POST` | `/stop` | `{ token, id }` | Stop one listener |
-| `POST` | `/status` | `{ token, since? }` | List active listeners and route history updated after `since` |
+| `GET` | `/history?since=<ms>` | — | Worker-owned history; returns records updated at or after `since`, or all records when omitted |
+| `POST` | `/status` | `{ token, since? }` | List active listeners (legacy builds also receive history here) |
 
 Multiple listeners can run for the same token. One feed poll serves all active listeners, and matches are grouped into one push per user to avoid duplicates. `excludeCountry` (for example `"NO"`) suppresses alerts for routes whose pickup or return country matches, and is also returned in `/status` so the app can keep active listeners in sync with the setting.
 
-While listeners are active, each poll also records detected route IDs in `HISTORY_FILE`. Routes that leave the feed are marked `unavailable` (or `expired` once their `expireTime` has passed). The app syncs those records through `/status` on each refresh and merges them into its local history, which powers the **History** sheet on the Freerider tab.
+While listeners are active, each poll also records detected route IDs in `HISTORY_FILE`. Routes that leave the feed are marked `unavailable` (or `expired` once their `expireTime` has passed). The worker is the single source of truth: the app fetches history through `/history` on each refresh, keeps it only in memory for the current session, and deletes the old device-owned history copy on first launch. This powers the route list and the **History** sheet without making history device-specific.
 
 Each status change is appended to a per-route transition list: detected, unavailable, expired, or available again. Inactive rows are re-checked on every poll, so `unavailable` becomes `expired` when `expireTime` passes. The app keeps every recorded transition per route plus a lifetime reappearance count and total time unavailable; route rows themselves are never pruned. Past transitions cannot be backfilled — recording starts with this version.
 
@@ -38,7 +39,7 @@ A route that disappears and later returns sends **Freerider route available agai
 |---|---|---|
 | `POLL_SECONDS` | `10` | Fallback/new-session interval |
 | `SESSIONS_FILE` | `./.freerider-sessions.json` | Session + seen-state file |
-| `HISTORY_FILE` | `./.freerider-history.json` | Detected-route history file |
+| `HISTORY_FILE` | `./.freerider-history.json` | Persistent worker-owned history file; use an absolute path in systemd |
 | `CONTROL_PORT` | `8787` | HTTP control port |
 | `CONTROL_HOST` | `0.0.0.0` | Bind address |
 | `EXPO_PUSH_URL` | Expo Push API | Override for testing |

@@ -534,6 +534,15 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'GET' && url.pathname === '/history') {
+      const since = Math.max(0, Number(url.searchParams.get('since')) || 0);
+      const history = Object.values(await readHistory()).filter(
+        (record) => (record.updatedAt ?? 0) >= since,
+      );
+      sendJson(response, 200, { history });
+      return;
+    }
+
     // Legacy preferences POST from Settings. Listeners are now explicit, so
     // acknowledge the token/filters without starting an implicit session.
     if (request.method === 'POST' && url.pathname === '/') {
