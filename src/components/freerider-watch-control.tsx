@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useFreeriderViewSettings } from '@/hooks/use-freerider-view-settings';
 import { ensureFreeriderPushToken, readStoredFreeriderPushToken } from '@/lib/freerider-push';
 import {
   DURATION_PRESETS,
@@ -32,6 +33,8 @@ type Props = {
 
 export function FreeriderWatchControl({ from, to }: Props) {
   const theme = useTheme();
+  const { excludeNorway } = useFreeriderViewSettings();
+  const syncingExclusionRef = useRef(false);
   const [pushToken, setPushToken] = useState<string | null>(null);
   const [sessions, setSessions] = useState<FreeriderSession[]>([]);
   const [durationMinutes, setDurationMinutes] = useState(60);
@@ -76,6 +79,32 @@ export function FreeriderWatchControl({ from, to }: Props) {
     if (pushToken) await load(pushToken);
   }, [load, pushToken]);
 
+  // Keep already-running listeners in sync when the Norway filter changes.
+  useEffect(() => {
+    if (!pushToken || syncingExclusionRef.current) return;
+    const desired = excludeNorway ? 'NO' : '';
+    const stale = sessions.filter((session) => (session.excludeCountry ?? '') !== desired);
+    if (stale.length === 0) return;
+
+    syncingExclusionRef.current = true;
+    void Promise.all(
+      stale.map((session) =>
+        startFreeriderSession({
+          token: pushToken,
+          from: session.from,
+          to: session.to,
+          durationMinutes: session.durationMinutes,
+          excludeCountry: desired,
+        }),
+      ),
+    )
+      .then(() => load(pushToken))
+      .catch(() => {})
+      .finally(() => {
+        syncingExclusionRef.current = false;
+      });
+  }, [excludeNorway, load, pushToken, sessions]);
+
   const handleToggle = useCallback(async () => {
     setBusy(true);
     setError(null);
@@ -88,7 +117,13 @@ export function FreeriderWatchControl({ from, to }: Props) {
       setPushToken(activeToken);
 
       if (sessions.length === 0) {
-        await startFreeriderSession({ token: activeToken, from, to, durationMinutes });
+        await startFreeriderSession({
+          token: activeToken,
+          from,
+          to,
+          durationMinutes,
+          excludeCountry: excludeNorway ? 'NO' : '',
+        });
       } else {
         const ordered = [...sessions].sort((a, b) => a.createdAt - b.createdAt);
         const last = ordered[ordered.length - 1];
@@ -100,7 +135,7 @@ export function FreeriderWatchControl({ from, to }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [durationMinutes, from, load, pushToken, sessions, to]);
+  }, [durationMinutes, excludeNorway, from, load, pushToken, sessions, to]);
 
   const handleStopSession = useCallback(
     async (id: string) => {

@@ -19,6 +19,7 @@ export type FreeriderSession = {
   id: string;
   from: string;
   to: string;
+  excludeCountry: string;
   pollSeconds: number;
   durationMinutes: number;
   createdAt: number;
@@ -30,6 +31,7 @@ type StartInput = {
   from: string;
   to: string;
   durationMinutes: number;
+  excludeCountry?: string;
 };
 
 export async function checkWorkerHealth() {
