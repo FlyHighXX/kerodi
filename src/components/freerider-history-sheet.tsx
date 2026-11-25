@@ -29,6 +29,7 @@ type Props = {
   from: string;
   to: string;
   now: number;
+  focusRecordId?: number | null;
   onClose: () => void;
 };
 
@@ -42,19 +43,106 @@ function statusLabel(status: RouteHistoryRecord['status']) {
   return 'ACTIVE';
 }
 
-export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props) {
+export function FreeriderHistorySheet({
+  records,
+  from,
+  to,
+  now,
+  focusRecordId,
+  onClose,
+}: Props) {
   const theme = useTheme();
   const { t } = useI18n();
-  const [fromDraft, setFromDraft] = useState(from);
-  const [toDraft, setToDraft] = useState(to);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const focusedRecord =
+    focusRecordId == null ? undefined : records.find((record) => record.id === focusRecordId);
+  const [fromDraft, setFromDraft] = useState(focusedRecord?.fromCity ?? from);
+  const [toDraft, setToDraft] = useState(focusedRecord?.toCity ?? to);
+  const [expandedId, setExpandedId] = useState<number | null>(focusRecordId ?? null);
 
   const summary = useMemo(
     () => buildPairPatternSummary(records, fromDraft, toDraft, now),
     [fromDraft, now, records, toDraft],
   );
   const topPairs = useMemo(() => listTopPairs(records).slice(0, 8), [records]);
-  const recent = useMemo(() => records.slice(0, 10), [records]);
+  const recent = useMemo(() => {
+    if (!focusedRecord) return records.slice(0, 10);
+    return [
+      focusedRecord,
+      ...records.filter((record) => record.id !== focusedRecord.id).slice(0, 9),
+    ];
+  }, [focusedRecord, records]);
+
+  const recentCard = (
+    <ThemedView type="background" style={styles.card}>
+      <ThemedText type="smallBold">{t('Recent routes')}</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {t('Tap a route to see its state changes.')}
+      </ThemedText>
+      {recent.length === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {t('Nothing recorded yet.')}
+        </ThemedText>
+      ) : (
+        recent.map((record) => {
+          const transitions = [...(record.transitions ?? [])].reverse();
+          const expanded = expandedId === record.id;
+          return (
+            <Pressable
+              key={record.id}
+              onPress={() => setExpandedId(expanded ? null : record.id)}
+              style={({ pressed }) => [styles.recentRow, pressed && styles.pressed]}>
+              <View style={styles.recentCopy}>
+                <ThemedText type="small" numberOfLines={1}>
+                  {record.fromCity} → {record.toCity}
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {formatDetectionText(record)}
+                  {record.status === 'active' || !record.disappearedAt
+                    ? ''
+                    : ` · ${t(statusLabel(record.status))} ${formatHistoryClock(record.disappearedAt)}`}
+                </ThemedText>
+                {record.reappearanceCount ? (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {t('Seen again {{count}}×', { count: record.reappearanceCount })}
+                    {record.lastReappearedAt
+                      ? t(' · Last {{time}}', {
+                          time: formatHistoryClock(record.lastReappearedAt),
+                        })
+                      : ''}
+                  </ThemedText>
+                ) : null}
+              </View>
+              {expanded ? (
+                <View style={[styles.timeline, { borderLeftColor: theme.backgroundSelected }]}>
+                  {transitions.length === 0 ? (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {t('No state changes recorded yet.')}
+                    </ThemedText>
+                  ) : (
+                    transitions.map((transition, index) => (
+                      <ThemedText
+                        key={`${record.id}-${transition.at}-${index}`}
+                        type="small"
+                        themeColor="textSecondary">
+                        {formatTransitionText(transition)}
+                      </ThemedText>
+                    ))
+                  )}
+                  {record.totalUnavailableMs ? (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {t('Total unavailable {{duration}}', {
+                        duration: formatDurationMs(record.totalUnavailableMs),
+                      })}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              ) : null}
+            </Pressable>
+          );
+        })
+      )}
+    </ThemedView>
+  );
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -78,6 +166,7 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}>
+            {focusRecordId != null ? recentCard : null}
             <View style={styles.inputRow}>
               <TextInput
                 value={fromDraft}
@@ -163,75 +252,7 @@ export function FreeriderHistorySheet({ records, from, to, now, onClose }: Props
               </ThemedView>
             ) : null}
 
-            <ThemedView type="background" style={styles.card}>
-              <ThemedText type="smallBold">{t('Recent routes')}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {t('Tap a route to see its state changes.')}
-              </ThemedText>
-              {recent.length === 0 ? (
-                <ThemedText type="small" themeColor="textSecondary">
-                  {t('Nothing recorded yet.')}
-                </ThemedText>
-              ) : (
-                recent.map((record) => {
-                  const transitions = [...(record.transitions ?? [])].reverse();
-                  const expanded = expandedId === record.id;
-                  return (
-                    <Pressable
-                      key={record.id}
-                      onPress={() => setExpandedId(expanded ? null : record.id)}
-                      style={({ pressed }) => [styles.recentRow, pressed && styles.pressed]}>
-                      <View style={styles.recentCopy}>
-                        <ThemedText type="small" numberOfLines={1}>
-                          {record.fromCity} → {record.toCity}
-                        </ThemedText>
-                        <ThemedText type="small" themeColor="textSecondary">
-                          {formatDetectionText(record)}
-                          {record.status === 'active' || !record.disappearedAt
-                            ? ''
-                            : ` · ${t(statusLabel(record.status))} ${formatHistoryClock(record.disappearedAt)}`}
-                        </ThemedText>
-                        {record.reappearanceCount ? (
-                          <ThemedText type="small" themeColor="textSecondary">
-                            {t('Seen again {{count}}×', { count: record.reappearanceCount })}
-                            {record.lastReappearedAt
-                              ? t(' · Last {{time}}', {
-                                  time: formatHistoryClock(record.lastReappearedAt),
-                                })
-                              : ''}
-                          </ThemedText>
-                        ) : null}
-                      </View>
-                      {expanded ? (
-                        <View style={[styles.timeline, { borderLeftColor: theme.backgroundSelected }]}>
-                          {transitions.length === 0 ? (
-                            <ThemedText type="small" themeColor="textSecondary">
-                              {t('No state changes recorded yet.')}
-                            </ThemedText>
-                          ) : (
-                            transitions.map((transition, index) => (
-                              <ThemedText
-                                key={`${record.id}-${transition.at}-${index}`}
-                                type="small"
-                                themeColor="textSecondary">
-                                {formatTransitionText(transition)}
-                              </ThemedText>
-                            ))
-                          )}
-                          {record.totalUnavailableMs ? (
-                            <ThemedText type="small" themeColor="textSecondary">
-                              {t('Total unavailable {{duration}}', {
-                                duration: formatDurationMs(record.totalUnavailableMs),
-                              })}
-                            </ThemedText>
-                          ) : null}
-                        </View>
-                      ) : null}
-                    </Pressable>
-                  );
-                })
-              )}
-            </ThemedView>
+            {focusRecordId == null ? recentCard : null}
           </ScrollView>
         </ThemedView>
       </View>

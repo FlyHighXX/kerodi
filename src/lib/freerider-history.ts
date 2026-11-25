@@ -45,7 +45,7 @@ export type RouteHistoryRecord = {
   status: RouteStatus;
   /** Existing routes at first launch are baseline rows, not posting events. */
   countsTowardPatterns: boolean;
-  /** Status changes, newest last. Capped; reappearanceCount keeps the full tally. */
+  /** Status changes, newest last. All recorded changes are kept. */
   transitions: RouteTransition[];
   reappearanceCount: number;
   totalUnavailableMs: number;
@@ -82,7 +82,6 @@ export type PairTotal = {
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MAX_TRANSITIONS = 50;
 const TRANSITION_MERGE_WINDOW_MS = 5 * 60 * 1000;
 
 function cityName(location: FreerideLocation) {
@@ -173,7 +172,7 @@ function applyTransition(
   const transitions = [
     ...(Array.isArray(record.transitions) ? record.transitions : []),
     { at: now, status, kind },
-  ].slice(-MAX_TRANSITIONS);
+  ];
 
   return {
     ...record,
@@ -204,7 +203,7 @@ function dedupeTransitions(transitions: RouteTransition[]) {
     merged.push(transition);
   }
 
-  return merged.slice(-MAX_TRANSITIONS);
+  return merged;
 }
 
 async function readHistoryMap(): Promise<Record<string, RouteHistoryRecord>> {

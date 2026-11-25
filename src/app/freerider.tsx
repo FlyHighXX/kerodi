@@ -49,6 +49,7 @@ export default function FreeriderScreen() {
   const { showUnavailable, showExpired, excludeNorway } = useFreeriderViewSettings();
   const [newOnly, setNewOnly] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
+  const [historyFocusId, setHistoryFocusId] = useState<number | null>(null);
 
   const {
     routes,
@@ -63,6 +64,14 @@ export default function FreeriderScreen() {
   } = useFreeriderRoutes();
 
   const newIdSet = useMemo(() => new Set(newIds), [newIds]);
+  const openHistory = useCallback((recordId: number | null = null) => {
+    setHistoryFocusId(recordId);
+    setHistoryVisible(true);
+  }, []);
+  const closeHistory = useCallback(() => {
+    setHistoryVisible(false);
+    setHistoryFocusId(null);
+  }, []);
   const isExcludedCountry = useCallback(
     (country?: string | null) => excludeNorway && (country ?? '').trim().toUpperCase() === 'NO',
     [excludeNorway],
@@ -124,9 +133,10 @@ export default function FreeriderScreen() {
         route={item}
         isNew={newIdSet.has(item.id)}
         record={historyById.get(item.id)}
+        onOpenHistory={() => openHistory(item.id)}
       />
     ),
-    [historyById, newIdSet],
+    [historyById, newIdSet, openHistory],
   );
 
   const filterSummary = [
@@ -149,7 +159,7 @@ export default function FreeriderScreen() {
               : t('Not loaded yet')}
           </ThemedText>
           <View style={styles.statusActions}>
-            <Pressable onPress={() => setHistoryVisible(true)} hitSlop={8}>
+            <Pressable onPress={() => openHistory(null)} hitSlop={8}>
               <ThemedText type="link">{t('History')}</ThemedText>
             </Pressable>
             <Pressable
@@ -251,12 +261,13 @@ export default function FreeriderScreen() {
 
       {historyVisible ? (
         <FreeriderHistorySheet
-          key={`${fromQuery}|${toQuery}`}
+          key={`${fromQuery}|${toQuery}|${historyFocusId ?? ''}`}
           records={visibleHistory}
           from={fromQuery}
           to={toQuery}
           now={lastUpdated ?? 0}
-          onClose={() => setHistoryVisible(false)}
+          focusRecordId={historyFocusId}
+          onClose={closeHistory}
         />
       ) : null}
     </ThemedView>
@@ -267,10 +278,12 @@ function RouteCard({
   route,
   isNew,
   record,
+  onOpenHistory,
 }: {
   route: RouteOffer;
   isNew: boolean;
   record?: RouteHistoryRecord;
+  onOpenHistory: () => void;
 }) {
   const { t } = useI18n();
   const badgeLabel =
@@ -326,7 +339,10 @@ function RouteCard({
         {t('Expires {{time}}', { time: formatLocalDateTime(route.expireTime) })}
       </ThemedText>
       {record ? (
-        <>
+        <Pressable
+          onPress={onOpenHistory}
+          hitSlop={4}
+          style={({ pressed }) => [styles.historyButton, pressed && styles.pressed]}>
           <ThemedText type="small" themeColor="textSecondary">
             {formatDetectionText(record)}
             {record.status === 'active' || !record.disappearedAt
@@ -341,7 +357,8 @@ function RouteCard({
                 : ''}
             </ThemedText>
           ) : null}
-        </>
+          <ThemedText type="link">{t('View full history')}</ThemedText>
+        </Pressable>
       ) : null}
 
       <FreeriderRouteLink
@@ -440,6 +457,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: Spacing.one,
+  },
+  historyButton: {
+    alignSelf: 'flex-start',
+    gap: Spacing.half,
   },
   siteLink: {
     alignSelf: 'flex-start',

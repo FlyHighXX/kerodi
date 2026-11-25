@@ -88,6 +88,7 @@ const sv: Record<string, string> = {
   'Updated {{time}}': 'Uppdaterad {{time}}',
   'Not loaded yet': 'Inte laddad ännu',
   History: 'Historik',
+  'View full history': 'Visa full historik',
   'Checking…': 'Kontrollerar…',
   'Check now': 'Kontrollera nu',
   '{{count}} new · Mark seen': '{{count}} nya · Markera som sedda',
