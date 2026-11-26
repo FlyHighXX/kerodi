@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { WORKER_URL_KEY } from '@/lib/freerider';
 
+const DEFAULT_WORKER_URL = 'http://100.77.0.70:8787';
 const configuredEndpoint = process.env.EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT?.trim();
 
 export function normalizeWorkerUrl(value: string) {
@@ -19,9 +20,9 @@ export function isValidWorkerUrl(value: string) {
   }
 }
 
-/** Build-time fallback. There is no baked-in LAN address by default. */
+/** Tailnet worker by default; a build-time endpoint can override it. */
 export function defaultWorkerUrl() {
-  return normalizeWorkerUrl(configuredEndpoint ?? '');
+  return normalizeWorkerUrl(configuredEndpoint || DEFAULT_WORKER_URL);
 }
 
 export async function readStoredWorkerUrl() {
@@ -32,7 +33,7 @@ export async function readStoredWorkerUrl() {
   }
 }
 
-/** Saved address wins; otherwise use the build-time endpoint, if any. */
+/** Saved address wins; otherwise use the default Tailnet worker. */
 export async function readWorkerUrl() {
   return (await readStoredWorkerUrl()) || defaultWorkerUrl();
 }

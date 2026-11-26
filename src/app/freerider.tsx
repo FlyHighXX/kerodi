@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -33,6 +33,7 @@ import {
   routeFromHistory,
   type RouteHistoryRecord,
 } from '@/lib/freerider-history';
+import { registerFreeriderScrollToTop } from '@/lib/freerider-scroll-to-top';
 import { useI18n } from '@/providers/locale-provider';
 
 function formatClock(timestamp: number) {
@@ -50,6 +51,15 @@ export default function FreeriderScreen() {
   const [newOnly, setNewOnly] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
   const [historyFocusId, setHistoryFocusId] = useState<number | null>(null);
+  const listRef = useRef<FlatList<RouteOffer>>(null);
+
+  useEffect(
+    () =>
+      registerFreeriderScrollToTop(() => {
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }),
+    [],
+  );
 
   const {
     routes,
@@ -232,6 +242,7 @@ export default function FreeriderScreen() {
         </View>
 
         <FlatList
+          ref={listRef}
           data={filtered}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderItem}

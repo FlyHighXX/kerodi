@@ -151,8 +151,8 @@ authentication beyond the per-user push token, so keep it behind Tailscale.
 On a Linux host, install [`kerodi-worker.service`](./tailscale/kerodi-worker.service)
 as described in the file. On the Termux host use the start script above.
 
-The app stores the worker address per device in **Settings → Worker connection**.
-Use a tailnet address:
+The app is pre-filled with `http://100.77.0.70:8787` and stores any override
+per device in **Settings → Worker connection**. Use a tailnet address:
 
 ```text
 http://kerodi-worker.tailnet-name.ts.net:8787

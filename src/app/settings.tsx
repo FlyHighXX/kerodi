@@ -198,7 +198,7 @@ export default function SettingsScreen() {
             <ThemedText type="smallBold">{t('Worker connection')}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               {t(
-                'Address of the machine running the Freerider worker. Use its Tailscale address when you are away from home. Notifications are set up automatically the first time you start a listener on the Freerider tab.',
+                'Address of the machine running the Freerider worker. It is pre-filled with the Tailnet address and saved per device. Notifications are set up automatically the first time you start a listener on the Freerider tab.',
               )}
             </ThemedText>
             <TextInput
