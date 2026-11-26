@@ -33,6 +33,7 @@ import {
   routeFromHistory,
   type RouteHistoryRecord,
 } from '@/lib/freerider-history';
+import { useI18n } from '@/providers/locale-provider';
 
 function formatClock(timestamp: number) {
   return new Date(timestamp).toLocaleTimeString(undefined, {
@@ -43,10 +44,12 @@ function formatClock(timestamp: number) {
 
 export default function FreeriderScreen() {
   const theme = useTheme();
+  const { t } = useI18n();
   const { fromQuery, toQuery } = useFreeriderFilters();
   const { showUnavailable, showExpired, excludeNorway } = useFreeriderViewSettings();
   const [newOnly, setNewOnly] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
+  const [historyFocusId, setHistoryFocusId] = useState<number | null>(null);
 
   const {
     routes,
@@ -61,6 +64,14 @@ export default function FreeriderScreen() {
   } = useFreeriderRoutes();
 
   const newIdSet = useMemo(() => new Set(newIds), [newIds]);
+  const openHistory = useCallback((recordId: number | null = null) => {
+    setHistoryFocusId(recordId);
+    setHistoryVisible(true);
+  }, []);
+  const closeHistory = useCallback(() => {
+    setHistoryVisible(false);
+    setHistoryFocusId(null);
+  }, []);
   const isExcludedCountry = useCallback(
     (country?: string | null) => excludeNorway && (country ?? '').trim().toUpperCase() === 'NO',
     [excludeNorway],
@@ -122,15 +133,16 @@ export default function FreeriderScreen() {
         route={item}
         isNew={newIdSet.has(item.id)}
         record={historyById.get(item.id)}
+        onOpenHistory={() => openHistory(item.id)}
       />
     ),
-    [historyById, newIdSet],
+    [historyById, newIdSet, openHistory],
   );
 
   const filterSummary = [
-    fromQuery ? `From ${fromQuery}` : null,
-    toQuery ? `To ${toQuery}` : null,
-    excludeNorway ? 'NO excluded' : null,
+    fromQuery ? t('From {{query}}', { query: fromQuery }) : null,
+    toQuery ? t('To {{query}}', { query: toQuery }) : null,
+    excludeNorway ? t('NO excluded') : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -142,23 +154,27 @@ export default function FreeriderScreen() {
       <ThemedView type="backgroundElement" style={styles.statusCard}>
         <View style={styles.rowBetween}>
           <ThemedText type="small" themeColor="textSecondary">
-            {lastUpdated ? `Updated ${formatClock(lastUpdated)}` : 'Not loaded yet'}
+            {lastUpdated
+              ? t('Updated {{time}}', { time: formatClock(lastUpdated) })
+              : t('Not loaded yet')}
           </ThemedText>
           <View style={styles.statusActions}>
-            <Pressable onPress={() => setHistoryVisible(true)} hitSlop={8}>
-              <ThemedText type="link">History</ThemedText>
+            <Pressable onPress={() => openHistory(null)} hitSlop={8}>
+              <ThemedText type="link">{t('History')}</ThemedText>
             </Pressable>
             <Pressable
               onPress={() => void refresh({ force: true })}
               disabled={refreshing}
               hitSlop={8}>
               <ThemedText type="link" themeColor={refreshing ? 'textSecondary' : undefined}>
-                {refreshing ? 'Checking…' : 'Check now'}
+                {refreshing ? t('Checking…') : t('Check now')}
               </ThemedText>
             </Pressable>
             {newIds.length > 0 ? (
               <Pressable onPress={markAllSeen} hitSlop={8}>
-                <ThemedText type="link">{newIds.length} new · Mark seen</ThemedText>
+                <ThemedText type="link">
+                  {t('{{count}} new · Mark seen', { count: newIds.length })}
+                </ThemedText>
               </Pressable>
             ) : null}
           </View>
@@ -170,14 +186,17 @@ export default function FreeriderScreen() {
         ) : null}
         {hiddenInactive.unavailable + hiddenInactive.expired > 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
-            Hidden: {hiddenInactive.unavailable} unavailable · {hiddenInactive.expired} expired
+            {t('Hidden: {{unavailable}} unavailable · {{expired}} expired', {
+              unavailable: hiddenInactive.unavailable,
+              expired: hiddenInactive.expired,
+            })}
           </ThemedText>
         ) : null}
         {error ? (
           <ThemedText type="small" themeColor="textSecondary">
             {error}
             {Platform.OS === 'web'
-              ? ' The site does not allow browser requests from other origins — try the native app.'
+              ? t(' The site does not allow browser requests from other origins — try the native app.')
               : ''}
           </ThemedText>
         ) : null}
@@ -192,11 +211,11 @@ export default function FreeriderScreen() {
             pressed && styles.pressed,
           ]}>
           <ThemedText type="small" themeColor={newOnly ? 'text' : 'textSecondary'}>
-            New only
+            {t('New only')}
           </ThemedText>
         </Pressable>
         <ThemedText type="small" themeColor="textSecondary">
-          {filtered.length} shown
+          {t('{{count}} shown', { count: filtered.length })}
         </ThemedText>
       </View>
     </View>
@@ -208,7 +227,7 @@ export default function FreeriderScreen() {
         <View style={styles.header}>
           <ThemedText type="subtitle">Freerider</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Hertz routes. Alerts are sent by the worker.
+            {t('Hertz routes. Alerts are sent by the worker.')}
           </ThemedText>
         </View>
 
@@ -229,10 +248,10 @@ export default function FreeriderScreen() {
             ) : (
               <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
                 {error
-                  ? 'No routes could be loaded.'
+                  ? t('No routes could be loaded.')
                   : routes.length === 0
-                    ? 'No routes are available right now.'
-                    : 'No routes match these filters.'}
+                    ? t('No routes are available right now.')
+                    : t('No routes match these filters.')}
               </ThemedText>
             )
           }
@@ -242,12 +261,13 @@ export default function FreeriderScreen() {
 
       {historyVisible ? (
         <FreeriderHistorySheet
-          key={`${fromQuery}|${toQuery}`}
+          key={`${fromQuery}|${toQuery}|${historyFocusId ?? ''}`}
           records={visibleHistory}
           from={fromQuery}
           to={toQuery}
           now={lastUpdated ?? 0}
-          onClose={() => setHistoryVisible(false)}
+          focusRecordId={historyFocusId}
+          onClose={closeHistory}
         />
       ) : null}
     </ThemedView>
@@ -258,13 +278,22 @@ function RouteCard({
   route,
   isNew,
   record,
+  onOpenHistory,
 }: {
   route: RouteOffer;
   isNew: boolean;
   record?: RouteHistoryRecord;
+  onOpenHistory: () => void;
 }) {
-  const inactive = record?.status === 'unavailable' || record?.status === 'expired';
-  const badgeLabel = inactive ? record.status.toUpperCase() : isNew ? 'NEW' : null;
+  const { t } = useI18n();
+  const badgeLabel =
+    record?.status === 'unavailable'
+      ? t('UNAVAILABLE')
+      : record?.status === 'expired'
+        ? t('EXPIRED')
+        : isNew
+          ? t('NEW')
+          : null;
 
   return (
     <ThemedView type="backgroundElement" style={styles.routeCard}>
@@ -274,7 +303,7 @@ function RouteCard({
             {route.pickupName} → {route.returnName}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            {route.carModel || 'Car on request'}
+            {route.carModel || t('Car on request')}
           </ThemedText>
         </View>
         {badgeLabel ? (
@@ -301,29 +330,35 @@ function RouteCard({
       </View>
 
       <ThemedText type="small" themeColor="textSecondary">
-        Available {formatLocalDateTime(route.availableAt)}
+        {t('Available {{time}}', { time: formatLocalDateTime(route.availableAt) })}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Return by {formatLocalDateTime(route.latestReturn)}
+        {t('Return by {{time}}', { time: formatLocalDateTime(route.latestReturn) })}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Expires {formatLocalDateTime(route.expireTime)}
+        {t('Expires {{time}}', { time: formatLocalDateTime(route.expireTime) })}
       </ThemedText>
       {record ? (
-        <>
+        <Pressable
+          onPress={onOpenHistory}
+          hitSlop={4}
+          style={({ pressed }) => [styles.historyButton, pressed && styles.pressed]}>
           <ThemedText type="small" themeColor="textSecondary">
             {formatDetectionText(record)}
             {record.status === 'active' || !record.disappearedAt
               ? ''
-              : ` · Gone ${formatHistoryClock(record.disappearedAt)}`}
+              : t(' · Gone {{time}}', { time: formatHistoryClock(record.disappearedAt) })}
           </ThemedText>
           {record.reappearanceCount ? (
             <ThemedText type="small" themeColor="textSecondary">
-              Seen again {record.reappearanceCount}×
-              {record.lastReappearedAt ? ` · Last ${formatHistoryClock(record.lastReappearedAt)}` : ''}
+              {t('Seen again {{count}}×', { count: record.reappearanceCount })}
+              {record.lastReappearedAt
+                ? t(' · Last {{time}}', { time: formatHistoryClock(record.lastReappearedAt) })
+                : ''}
             </ThemedText>
           ) : null}
-        </>
+          <ThemedText type="link">{t('View full history')}</ThemedText>
+        </Pressable>
       ) : null}
 
       <FreeriderRouteLink
@@ -332,7 +367,7 @@ function RouteCard({
         returnName={route.returnName}
         carModel={route.carModel}
         style={styles.siteLink}>
-        <ThemedText type="linkPrimary">Book on hertzfreerider.se</ThemedText>
+        <ThemedText type="linkPrimary">{t('Book on hertzfreerider.se')}</ThemedText>
       </FreeriderRouteLink>
     </ThemedView>
   );
@@ -422,6 +457,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: Spacing.one,
+  },
+  historyButton: {
+    alignSelf: 'flex-start',
+    gap: Spacing.half,
   },
   siteLink: {
     alignSelf: 'flex-start',

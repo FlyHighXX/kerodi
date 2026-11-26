@@ -20,9 +20,11 @@ import {
   readWorkerUrl,
   writeWorkerUrl,
 } from '@/lib/freerider-worker-url';
+import { useI18n } from '@/providers/locale-provider';
 
 export default function SettingsScreen() {
   const theme = useTheme();
+  const { t } = useI18n();
   const { fromQuery, setFromQuery, toQuery, setToQuery, clearLocations } =
     useFreeriderFilters();
   const {
@@ -67,7 +69,7 @@ export default function SettingsScreen() {
 
   const saveWorkerUrl = useCallback(async () => {
     if (!isValidWorkerUrl(workerUrlDraft)) {
-      setWorkerUrlError('Enter a full URL, for example http://100.77.0.70:8787');
+      setWorkerUrlError(t('Enter a full URL, for example http://100.77.0.70:8787'));
       return;
     }
     setWorkerUrlBusy(true);
@@ -78,11 +80,11 @@ export default function SettingsScreen() {
       setWorkerUrlDraft(saved);
       setWorkerUrlSaved(saved);
     } catch {
-      setWorkerUrlError('Could not save the worker URL.');
+      setWorkerUrlError(t('Could not save the worker URL.'));
     } finally {
       setWorkerUrlBusy(false);
     }
-  }, [workerUrlDraft]);
+  }, [workerUrlDraft, t]);
 
   const resetWorkerUrl = useCallback(async () => {
     setWorkerUrlBusy(true);
@@ -94,16 +96,16 @@ export default function SettingsScreen() {
       setWorkerUrlDraft(fallback);
       setWorkerUrlSaved(fallback);
     } catch {
-      setWorkerUrlError('Could not reset the worker URL.');
+      setWorkerUrlError(t('Could not reset the worker URL.'));
     } finally {
       setWorkerUrlBusy(false);
     }
-  }, []);
+  }, [t]);
 
   const testWorkerUrl = useCallback(async () => {
     setWorkerUrlError(null);
     if (workerUrlDraft !== workerUrlSaved) {
-      setWorkerTestResult('Save the URL before testing it.');
+      setWorkerTestResult(t('Save the URL before testing it.'));
       return;
     }
     setWorkerUrlBusy(true);
@@ -111,20 +113,22 @@ export default function SettingsScreen() {
     try {
       const ok = await checkWorkerHealth();
       setWorkerTestResult(
-        ok ? 'Worker reachable.' : 'Could not reach the worker. Check the URL and network.',
+        ok
+          ? t('Worker reachable.')
+          : t('Could not reach the worker. Check the URL and network.'),
       );
     } finally {
       setWorkerUrlBusy(false);
     }
-  }, [workerUrlDraft, workerUrlSaved]);
+  }, [workerUrlDraft, workerUrlSaved, t]);
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
-          <ThemedText type="subtitle">Freerider settings</ThemedText>
+          <ThemedText type="subtitle">{t('Freerider settings')}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Used by the routes tab and the new-route watcher.
+            {t('Used by the routes tab and the new-route watcher.')}
           </ThemedText>
         </View>
 
@@ -132,63 +136,70 @@ export default function SettingsScreen() {
           <ThemedView type="backgroundElement" style={styles.card}>
             <View style={styles.rowBetween}>
               <ThemedText type="smallBold" themeColor="textSecondary">
-                SEARCH LOCATIONS
+                {t('SEARCH LOCATIONS')}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {locations.length > 0 ? `${locations.length} stores` : 'Loading stores…'}
+                {locations.length > 0
+                  ? t('{{count}} stores', { count: locations.length })
+                  : t('Loading stores…')}
               </ThemedText>
             </View>
             <ThemedText type="small" themeColor="textSecondary">
-              Type a city or part of a name. “Stockholm” matches every Stockholm store.
+              {t('Type a city or part of a name. “Stockholm” matches every Stockholm store.')}
             </ThemedText>
 
             <LocationField
-              label="FROM"
+              label={t('FROM')}
               value={fromQuery}
               onChangeValue={setFromQuery}
               locations={locations}
-              placeholder="e.g. Stockholm"
+              placeholder={t('e.g. Stockholm')}
             />
             <LocationField
-              label="TO"
+              label={t('TO')}
               value={toQuery}
               onChangeValue={setToQuery}
               locations={locations}
-              placeholder="e.g. Göteborg"
+              placeholder={t('e.g. Göteborg')}
             />
 
             {fromQuery.length > 0 || toQuery.length > 0 ? (
               <Pressable onPress={clearLocations} hitSlop={8}>
-                <ThemedText type="link">Clear places</ThemedText>
+                <ThemedText type="link">{t('Clear places')}</ThemedText>
               </Pressable>
             ) : null}
           </ThemedView>
 
           <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="smallBold">Route list</ThemedText>
+            <ThemedText type="smallBold">{t('Route list')}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Available routes are sorted A–Z by pickup location, then return location. New
-              detections stay pinned to the top.
+              {t(
+                'Available routes are sorted A–Z by pickup location, then return location. New detections stay pinned to the top.',
+              )}
             </ThemedText>
             <ToggleRow
-              label="Show unavailable routes"
+              label={t('Show unavailable routes')}
               value={showUnavailable}
               onChange={setShowUnavailable}
             />
-            <ToggleRow label="Show expired routes" value={showExpired} onChange={setShowExpired} />
             <ToggleRow
-              label="Exclude Norway (NO)"
+              label={t('Show expired routes')}
+              value={showExpired}
+              onChange={setShowExpired}
+            />
+            <ToggleRow
+              label={t('Exclude Norway (NO)')}
               value={excludeNorway}
               onChange={setExcludeNorway}
             />
           </ThemedView>
 
           <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="smallBold">Worker connection</ThemedText>
+            <ThemedText type="smallBold">{t('Worker connection')}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Address of the machine running the Freerider worker. Use its Tailscale address when
-              you are away from home. Notifications are set up automatically the first time you
-              start a listener on the Freerider tab.
+              {t(
+                'Address of the machine running the Freerider worker. Use its Tailscale address when you are away from home. Notifications are set up automatically the first time you start a listener on the Freerider tab.',
+              )}
             </ThemedText>
             <TextInput
               value={workerUrlDraft}
@@ -210,20 +221,22 @@ export default function SettingsScreen() {
                   workerUrlBusy && styles.disabled,
                   pressed && styles.pressed,
                 ]}>
-                <ThemedText type="smallBold">{workerUrlBusy ? '…' : 'Save'}</ThemedText>
+                <ThemedText type="smallBold">{workerUrlBusy ? '…' : t('Save')}</ThemedText>
               </Pressable>
               <Pressable
                 onPress={() => void testWorkerUrl()}
                 disabled={workerUrlBusy || workerUrlDraft !== workerUrlSaved}
                 hitSlop={8}>
-                <ThemedText type="link">Test</ThemedText>
+                <ThemedText type="link">{t('Test')}</ThemedText>
               </Pressable>
               <Pressable onPress={() => void resetWorkerUrl()} disabled={workerUrlBusy} hitSlop={8}>
-                <ThemedText type="link">Reset</ThemedText>
+                <ThemedText type="link">{t('Reset')}</ThemedText>
               </Pressable>
             </View>
             <ThemedText type="small" themeColor="textSecondary">
-              {workerUrlSaved ? `Saved: ${workerUrlSaved}` : 'No worker URL saved yet.'}
+              {workerUrlSaved
+                ? t('Saved: {{url}}', { url: workerUrlSaved })
+                : t('No worker URL saved yet.')}
             </ThemedText>
             {workerUrlError ? (
               <ThemedText type="small" themeColor="textSecondary">
@@ -252,6 +265,7 @@ function ToggleRow({
   onChange: (value: boolean) => void;
 }) {
   const theme = useTheme();
+  const { t } = useI18n();
   return (
     <View style={styles.toggleRow}>
       <ThemedText type="small" themeColor="textSecondary">
@@ -265,7 +279,7 @@ function ToggleRow({
           pressed && styles.pressed,
         ]}>
         <ThemedText type="smallBold" themeColor={value ? 'text' : 'textSecondary'}>
-          {value ? 'On' : 'Off'}
+          {t(value ? 'On' : 'Off')}
         </ThemedText>
       </Pressable>
     </View>
@@ -288,6 +302,7 @@ function LocationField({
   placeholder,
 }: LocationFieldProps) {
   const theme = useTheme();
+  const { t } = useI18n();
   const [showAll, setShowAll] = useState(false);
 
   const { suggestions, totalMatches } = useMemo(() => {
@@ -333,7 +348,9 @@ function LocationField({
                 {location.name}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {[location.city, location.country?.toUpperCase()].filter(Boolean).join(', ')}
+                {[location.city ? t(location.city) : location.city, location.country?.toUpperCase()]
+                  .filter(Boolean)
+                  .join(', ')}
               </ThemedText>
             </Pressable>
           ))}
@@ -343,7 +360,7 @@ function LocationField({
       {totalMatches > 10 || showAll ? (
         <Pressable onPress={() => setShowAll((current) => !current)} hitSlop={8}>
           <ThemedText type="link">
-            {showAll ? 'Show fewer' : `Show all ${totalMatches} stores`}
+            {showAll ? t('Show fewer') : t('Show all {{count}} stores', { count: totalMatches })}
           </ThemedText>
         </Pressable>
       ) : null}

@@ -16,6 +16,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useI18n } from '@/providers/locale-provider';
 import {
   clearStoredApiKey,
   clearStoredProvider,
@@ -42,7 +43,7 @@ import {
   type Note,
   type WellbeingInsight,
 } from '@/lib/insights';
-import { DEFAULT_INSTRUCTIONS } from '@/lib/insights-prompt';
+import { defaultInstructionsFor } from '@/lib/insights-prompt';
 
 const NOTES_KEY = 'kerodi.notes.v1';
 const CONSENT_KEY = 'kerodi.ai.consent.v1';
@@ -59,6 +60,7 @@ function formatGeneratedAt(timestamp: number) {
 }
 
 export default function InsightsScreen() {
+  const { t, locale } = useI18n();
   const theme = useTheme();
   const [notes, setNotes] = useState<Note[]>([]);
   const [consent, setConsent] = useState(false);
@@ -157,20 +159,21 @@ export default function InsightsScreen() {
 
   /** Open the editor, seeding the draft with the current (or default) persona. */
   const toggleInstructions = useCallback(() => {
-    if (!editingInstructions) setInstructionsDraft(instructions ?? DEFAULT_INSTRUCTIONS);
+    if (!editingInstructions) setInstructionsDraft(instructions ?? defaultInstructionsFor(locale));
     setEditingInstructions((open) => !open);
-  }, [editingInstructions, instructions]);
+  }, [editingInstructions, instructions, locale]);
 
   /** Persist the draft. Blank (or unchanged-from-default) input clears it. */
   const saveInstructions = useCallback(() => {
     const trimmed = instructionsDraft.trim();
-    const next = !trimmed || trimmed === DEFAULT_INSTRUCTIONS.trim() ? null : trimmed;
+    const next =
+      !trimmed || trimmed === defaultInstructionsFor(locale).trim() ? null : trimmed;
     setInstructions(next);
     setEditingInstructions(false);
     setInstructionsDraft('');
     setError(null);
     (next ? setStoredInstructions(next) : clearStoredInstructions()).catch(() => {});
-  }, [instructionsDraft]);
+  }, [instructionsDraft, locale]);
 
   const resetInstructions = useCallback(() => {
     setInstructions(null);
@@ -206,10 +209,10 @@ export default function InsightsScreen() {
         setStatus('idle');
       })
       .catch((cause: unknown) => {
-        setError(cause instanceof Error ? cause.message : 'Something went wrong.');
+        setError(cause instanceof Error ? cause.message : t('Something went wrong.'));
         setStatus('error');
       });
-  }, [instructions, notes, providerId, storedKey]);
+  }, [instructions, notes, providerId, storedKey, t]);
 
   const providerLabel = providerId ? PROVIDERS[providerId].label : null;
 
@@ -218,7 +221,7 @@ export default function InsightsScreen() {
       <TextInput
         value={keyDraft}
         onChangeText={onChangeKey}
-        placeholder={storedKey ? 'Leave blank to keep your saved key' : 'Paste your API key'}
+        placeholder={t(storedKey ? 'Leave blank to keep your saved key' : 'Paste your API key')}
         placeholderTextColor={theme.textSecondary}
         autoCapitalize="none"
         autoCorrect={false}
@@ -227,11 +230,11 @@ export default function InsightsScreen() {
       />
       <ProviderChips selected={draftProvider} onSelect={setDraftProvider} />
       <ThemedText type="small" themeColor="textSecondary">
-        Get a {PROVIDERS[draftProvider].free ? 'free ' : ''}key from{' '}
+        {t(PROVIDERS[draftProvider].free ? 'Get a free key from ' : 'Get a key from ')}
         <ExternalLink href={PROVIDERS[draftProvider].docsUrl} style={styles.inlineLink}>
           <ThemedText type="link">{PROVIDERS[draftProvider].label}</ThemedText>
         </ExternalLink>
-        . It is stored encrypted on this device.
+        {t('. It is stored encrypted on this device.')}
       </ThemedText>
       <Pressable
         onPress={() => saveKey(enable)}
@@ -258,10 +261,10 @@ export default function InsightsScreen() {
       return (
         <ThemedView type="backgroundElement" style={styles.card}>
           <ThemedText type="smallBold" themeColor="textSecondary">
-            NOTHING TO ANALYSE YET
+            {t('NOTHING TO ANALYSE YET')}
           </ThemedText>
           <ThemedText style={styles.bodyText}>
-            Write a few notes first, then come back here to see patterns across them.
+            {t('Write a few notes first, then come back here to see patterns across them.')}
           </ThemedText>
         </ThemedView>
       );
@@ -271,20 +274,22 @@ export default function InsightsScreen() {
       return (
         <ThemedView type="backgroundElement" style={styles.card}>
           <ThemedText type="smallBold" themeColor="textSecondary">
-            SET UP AI INSIGHTS
+            {t('SET UP AI INSIGHTS')}
           </ThemedText>
           <ThemedText style={styles.bodyText}>
-            Insights sends your notes to an AI model to look for patterns. You bring your own API
-            key — it stays on this device and is sent only to the provider you choose. Nothing is
-            sent until you tap Generate.
+            {t(
+              'Insights sends your notes to an AI model to look for patterns. You bring your own API key — it stays on this device and is sent only to the provider you choose. Nothing is sent until you tap Generate.',
+            )}
           </ThemedText>
-          {renderKeyForm('Save key & enable', true)}
+          {renderKeyForm(t('Save key & enable'), true)}
           <Pressable
             onPress={storedKey ? () => saveKey(true) : enableProxy}
             hitSlop={8}
             style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
             <ThemedText type="small" themeColor="textSecondary">
-              {storedKey ? 'Enable with saved key' : 'Enable without a key (use a hosted server)'}
+              {storedKey
+                ? t('Enable with saved key')
+                : t('Enable without a key (use a hosted server)')}
             </ThemedText>
           </Pressable>
         </ThemedView>
@@ -298,29 +303,31 @@ export default function InsightsScreen() {
         <ThemedView type="backgroundElement" style={styles.card}>
           <View style={styles.keyHeader}>
             <ThemedText type="small" themeColor="textSecondary">
-              {providerLabel ? `Using your ${providerLabel} key` : 'Using a hosted server'}
+              {providerLabel
+                ? t('Using your {{provider}} key', { provider: providerLabel })
+                : t('Using a hosted server')}
             </ThemedText>
             {storedKey ? (
               <View style={styles.keyActions}>
                 <Pressable onPress={() => setEditingKey((v) => !v)} hitSlop={8}>
-                  <ThemedText type="link">Change</ThemedText>
+                  <ThemedText type="link">{t('Change')}</ThemedText>
                 </Pressable>
                 <Pressable onPress={removeKey} hitSlop={8}>
-                  <ThemedText type="link">Remove</ThemedText>
+                  <ThemedText type="link">{t('Remove')}</ThemedText>
                 </Pressable>
               </View>
             ) : null}
           </View>
-          {!storedKey || editingKey ? renderKeyForm('Save key', false) : null}
+          {!storedKey || editingKey ? renderKeyForm(t('Save key'), false) : null}
         </ThemedView>
 
         <ThemedView type="backgroundElement" style={styles.card}>
           <View style={styles.keyHeader}>
             <ThemedText type="small" themeColor="textSecondary">
-              INSTRUCTIONS TO THE AI
+              {t('INSTRUCTIONS TO THE AI')}
             </ThemedText>
             <Pressable onPress={toggleInstructions} hitSlop={8}>
-              <ThemedText type="link">{editingInstructions ? 'Close' : 'Edit'}</ThemedText>
+              <ThemedText type="link">{editingInstructions ? t('Close') : t('Edit')}</ThemedText>
             </Pressable>
           </View>
           {editingInstructions ? (
@@ -328,7 +335,7 @@ export default function InsightsScreen() {
               <TextInput
                 value={instructionsDraft}
                 onChangeText={setInstructionsDraft}
-                placeholder={DEFAULT_INSTRUCTIONS}
+                placeholder={defaultInstructionsFor(locale)}
                 placeholderTextColor={theme.textSecondary}
                 multiline
                 textAlignVertical="top"
@@ -341,23 +348,24 @@ export default function InsightsScreen() {
                 ]}
               />
               <ThemedText type="small" themeColor="textSecondary">
-                Tell the AI how to read your notes. The required response format is added
-                automatically, so your wording can&apos;t break it.
+                {t(
+                  "Tell the AI how to read your notes. The required response format is added automatically, so your wording can't break it.",
+                )}
               </ThemedText>
               <View style={styles.keyActions}>
                 <Pressable onPress={saveInstructions} hitSlop={8}>
-                  <ThemedText type="link">Save</ThemedText>
+                  <ThemedText type="link">{t('Save')}</ThemedText>
                 </Pressable>
                 <Pressable onPress={resetInstructions} hitSlop={8}>
-                  <ThemedText type="link">Reset to default</ThemedText>
+                  <ThemedText type="link">{t('Reset to default')}</ThemedText>
                 </Pressable>
               </View>
             </>
           ) : (
             <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
               {instructions
-                ? 'Using your custom instructions.'
-                : 'Using the default instructions.'}
+                ? t('Using your custom instructions.')
+                : t('Using the default instructions.')}
             </ThemedText>
           )}
         </ThemedView>
@@ -373,14 +381,14 @@ export default function InsightsScreen() {
             pressed && styles.pressed,
           ]}>
           <ThemedText type="smallBold">
-            {loading ? 'Analysing…' : insight ? 'Refresh insights' : 'Generate insights'}
+            {loading ? t('Analysing…') : insight ? t('Refresh insights') : t('Generate insights')}
           </ThemedText>
         </Pressable>
 
         {error ? (
           <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText type="smallBold" themeColor="textSecondary">
-              COULD NOT GENERATE
+              {t('COULD NOT GENERATE')}
             </ThemedText>
             <ThemedText style={styles.bodyText}>{error}</ThemedText>
           </ThemedView>
@@ -399,7 +407,7 @@ export default function InsightsScreen() {
           hitSlop={8}
           style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
           <ThemedText type="small" themeColor="textSecondary">
-            Turn off AI insights
+            {t('Turn off AI insights')}
           </ThemedText>
         </Pressable>
       </View>
@@ -410,11 +418,13 @@ export default function InsightsScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
-          <ThemedText type="subtitle">Insights</ThemedText>
+          <ThemedText type="subtitle">{t('Insights')}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             {notes.length === 0
-              ? 'Patterns in your wellbeing'
-              : `Across ${notes.length} note${notes.length === 1 ? '' : 's'}`}
+              ? t('Patterns in your wellbeing')
+              : t(notes.length === 1 ? 'Across {{count}} note' : 'Across {{count}} notes', {
+                  count: notes.length,
+                })}
           </ThemedText>
         </View>
 
@@ -461,15 +471,17 @@ function ProviderChips({
 }
 
 function InsightView({ insight }: { insight: WellbeingInsight }) {
+  const { t } = useI18n();
+
   return (
     <View style={styles.content}>
       <ThemedView type="backgroundElement" style={styles.card}>
         <ThemedText type="smallBold" themeColor="textSecondary">
-          SUMMARY
+          {t('SUMMARY')}
         </ThemedText>
         <ThemedText style={styles.bodyText}>{insight.summary}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Mood: {insight.mood.label} ({insight.mood.score >= 0 ? '+' : ''}
+          {t('Mood: ')}{t(insight.mood.label)} ({insight.mood.score >= 0 ? '+' : ''}
           {insight.mood.score.toFixed(2)})
           {insight.mood.rationale ? ` — ${insight.mood.rationale}` : ''}
         </ThemedText>
@@ -478,7 +490,7 @@ function InsightView({ insight }: { insight: WellbeingInsight }) {
       {insight.themes.length > 0 ? (
         <ThemedView type="backgroundElement" style={styles.card}>
           <ThemedText type="smallBold" themeColor="textSecondary">
-            THEMES
+            {t('THEMES')}
           </ThemedText>
           {insight.themes.map((theme) => (
             <ThemeRow key={theme.label} theme={theme} />
@@ -486,28 +498,38 @@ function InsightView({ insight }: { insight: WellbeingInsight }) {
         </ThemedView>
       ) : null}
 
-      <Section title="POSITIVE PATTERNS" items={insight.positivePatterns} />
-      <Section title="THINGS TO WATCH" items={insight.concerns} />
-      <Section title="IDEAS" items={insight.suggestions} />
+      <Section title={t('POSITIVE PATTERNS')} items={insight.positivePatterns} />
+      <Section title={t('THINGS TO WATCH')} items={insight.concerns} />
+      <Section title={t('IDEAS')} items={insight.suggestions} />
 
       <ThemedText type="small" themeColor="textSecondary" style={styles.footer}>
-        Based on {insight.analyzedCount} note{insight.analyzedCount === 1 ? '' : 's'} ·{' '}
-        {formatGeneratedAt(insight.generatedAt)} · {insight.provider}/{insight.model}
+        {t(
+          insight.analyzedCount === 1
+            ? 'Based on {{count}} note · {{time}} · {{provider}}'
+            : 'Based on {{count}} notes · {{time}} · {{provider}}',
+          {
+            count: insight.analyzedCount,
+            time: formatGeneratedAt(insight.generatedAt),
+            provider: `${insight.provider}/${insight.model}`,
+          },
+        )}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary" style={styles.footer}>
-        This is not medical advice.
+        {t('This is not medical advice.')}
       </ThemedText>
     </View>
   );
 }
 
 function ThemeRow({ theme }: { theme: InsightTheme }) {
+  const { t } = useI18n();
+
   return (
     <View style={styles.themeRow}>
       <View style={styles.themeHeader}>
         <ThemedText type="smallBold">{theme.label}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          {theme.count} note{theme.count === 1 ? '' : 's'}
+          {t(theme.count === 1 ? '{{count}} note' : '{{count}} notes', { count: theme.count })}
         </ThemedText>
       </View>
       {theme.examples.length > 0 ? (

@@ -18,7 +18,6 @@ const SESSIONS_FILE = process.env.SESSIONS_FILE ?? './.freerider-sessions.json';
 const HISTORY_FILE = process.env.HISTORY_FILE ?? './.freerider-history.json';
 const CONTROL_HOST = process.env.CONTROL_HOST ?? '0.0.0.0';
 const CONTROL_PORT = Number(process.env.CONTROL_PORT ?? 8787);
-const MAX_TRANSITIONS = 50;
 
 let sessionsCache;
 let historyCache;
@@ -181,7 +180,7 @@ function applyHistoryTransition(record, status, now) {
   const transitions = [
     ...(Array.isArray(record.transitions) ? record.transitions : []),
     { at: now, status, kind },
-  ].slice(-MAX_TRANSITIONS);
+  ];
 
   return {
     ...record,
@@ -532,6 +531,15 @@ const server = createServer(async (request, response) => {
 
     if (request.method === 'GET' && url.pathname === '/health') {
       sendJson(response, 200, { ok: true, sessions: (await readSessions()).length });
+      return;
+    }
+
+    if (request.method === 'GET' && url.pathname === '/history') {
+      const since = Math.max(0, Number(url.searchParams.get('since')) || 0);
+      const history = Object.values(await readHistory()).filter(
+        (record) => (record.updatedAt ?? 0) >= since,
+      );
+      sendJson(response, 200, { history });
       return;
     }
 

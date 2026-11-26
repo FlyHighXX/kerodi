@@ -1,3 +1,5 @@
+import { deviceLocale, translate } from '@/lib/i18n';
+
 /**
  * Layer on top of the public data that powers hertzfreerider.se.
  *
@@ -118,12 +120,14 @@ export async function fetchFreeriderRoutes(signal?: AbortSignal): Promise<RouteO
   });
 
   if (!response.ok) {
-    throw new Error(`hertzfreerider.se returned ${response.status}`);
+    throw new Error(
+      translate('hertzfreerider.se returned {{status}}', { status: response.status }),
+    );
   }
 
   const payload: unknown = await response.json();
   if (!Array.isArray(payload)) {
-    throw new Error('Unexpected response from hertzfreerider.se');
+    throw new Error(translate('Unexpected response from hertzfreerider.se'));
   }
 
   return normalizeRoutes(payload as FreerideRouteGroup[]);
@@ -137,12 +141,16 @@ export async function fetchFreeriderLocations(signal?: AbortSignal): Promise<Fre
   });
 
   if (!response.ok) {
-    throw new Error(`hertzfreerider.se returned ${response.status} for locations`);
+    throw new Error(
+      translate('hertzfreerider.se returned {{status}} for locations', {
+        status: response.status,
+      }),
+    );
   }
 
   const payload: unknown = await response.json();
   if (!Array.isArray(payload)) {
-    throw new Error('Unexpected locations response from hertzfreerider.se');
+    throw new Error(translate('Unexpected locations response from hertzfreerider.se'));
   }
 
   const byName = new Map<string, FreerideLocation>();
@@ -201,28 +209,15 @@ export function filterRoutes(
     });
 }
 
-const MONTHS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
-/** The API sends local times with no zone; parsing them as Date would shift them. */
+/** The API sends local times with no zone; build the Date from local parts to avoid a shift. */
 export function formatLocalDateTime(raw: string) {
   const [date, time] = raw.split('T');
   if (!date || !time) return raw;
   const [year, month, day] = date.split('-');
   const [hour, minute] = time.split(':');
-  const monthLabel = MONTHS[Number(month) - 1] ?? month;
+  const localDate = new Date(Number(year), Number(month) - 1, Number(day));
+  if (Number.isNaN(localDate.getTime())) return raw;
+  const monthLabel = new Intl.DateTimeFormat(deviceLocale(), { month: 'short' }).format(localDate);
   return `${day} ${monthLabel} ${year} · ${hour}:${minute}`;
 }
 

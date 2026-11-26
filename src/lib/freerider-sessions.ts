@@ -1,11 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import {
-  latestHistoryUpdatedAt,
-  mergeRouteHistory,
-  type RouteHistoryRecord,
-} from '@/lib/freerider-history';
+import { historyRecords, type RouteHistoryRecord } from '@/lib/freerider-history';
 import { readWorkerUrl } from '@/lib/freerider-worker-url';
+import { translate } from '@/lib/i18n';
 
 const CACHE_KEY = 'kerodi.freerider.sessions.v1';
 const DURATION_KEY = 'kerodi.freerider.watch-duration-minutes.v1';
@@ -52,7 +49,7 @@ export async function checkWorkerHealth() {
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const endpoint = await readWorkerUrl();
-  if (!endpoint) throw new Error('Set the worker URL in Settings first.');
+  if (!endpoint) throw new Error(translate('Set the worker URL in Settings first.'));
 
   const response = await fetch(`${endpoint}${path}`, {
     method: 'POST',
@@ -61,9 +58,36 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.error) {
-    throw new Error(payload.error || `Worker returned ${response.status}`);
+    throw new Error(
+      payload.error || translate('Worker returned {{status}}', { status: response.status }),
+    );
   }
   return payload as T;
+}
+
+/** Read worker-owned history deltas. No history is stored on the device. */
+export async function fetchWorkerRouteHistory(
+  since = 0,
+  signal?: AbortSignal,
+): Promise<RouteHistoryRecord[]> {
+  const endpoint = await readWorkerUrl();
+  if (!endpoint) return [];
+
+  const query = since > 0 ? `?since=${Math.floor(since)}` : '';
+  const response = await fetch(`${endpoint}/history${query}`, { signal });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.error) {
+    throw new Error(
+      payload.error || translate('Worker returned {{status}}', { status: response.status }),
+    );
+  }
+
+  const records = Array.isArray(payload.history)
+    ? payload.history.filter(
+        (record: RouteHistoryRecord) => record && typeof record.id === 'number',
+      )
+    : [];
+  return historyRecords(records);
 }
 
 async function readCachedSessions(): Promise<FreeriderSession[]> {
@@ -84,12 +108,7 @@ async function writeCachedSessions(sessions: FreeriderSession[]) {
 
 export async function loadFreeriderSessions(token: string): Promise<FreeriderSession[]> {
   try {
-    const since = await latestHistoryUpdatedAt();
-    const payload = await post<{ sessions: FreeriderSession[]; history?: RouteHistoryRecord[] }>(
-      '/status',
-      { token, since },
-    );
-    if (Array.isArray(payload.history)) await mergeRouteHistory(payload.history);
+    const payload = await post<{ sessions: FreeriderSession[] }>('/status', { token });
     const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
     await writeCachedSessions(sessions);
     return sessions.filter((session) => session.expiresAt > Date.now());
@@ -97,13 +116,6 @@ export async function loadFreeriderSessions(token: string): Promise<FreeriderSes
     const cached = await readCachedSessions();
     return cached.filter((session) => session.expiresAt > Date.now());
   }
-}
-
-/** Sync worker-owned route history without needing a push token. */
-export async function syncWorkerRouteHistory(): Promise<RouteHistoryRecord[]> {
-  const since = await latestHistoryUpdatedAt();
-  const payload = await post<{ history?: RouteHistoryRecord[] }>('/status', { token: '', since });
-  return mergeRouteHistory(payload.history ?? []);
 }
 
 export async function startFreeriderSession(input: StartInput): Promise<FreeriderSession> {
@@ -146,8 +158,9 @@ export function formatDurationLabel(minutes: number) {
 
 export function formatRemaining(expiresAt: number, now: number) {
   const minutes = Math.max(0, Math.ceil((expiresAt - now) / 60_000));
-  if (minutes < 60) return `${minutes}m left`;
+  if (minutes < 60) return translate('{{duration}} left', { duration: `${minutes}m` });
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest === 0 ? `${hours}h left` : `${hours}h ${rest}m left`;
+  const duration = rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+  return translate('{{duration}} left', { duration });
 }

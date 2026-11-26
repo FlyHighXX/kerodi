@@ -16,6 +16,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { FREERIDER_SITE_URL } from '@/lib/freerider';
+import { useI18n } from '@/providers/locale-provider';
 
 export type FreeriderRouteLinkRoute = {
   pickupName: string;
@@ -142,6 +143,7 @@ export function FreeriderRouteLink({
   style,
 }: Props) {
   const theme = useTheme();
+  const { t } = useI18n();
   const injectedJavaScript = useMemo(() => {
     if (!pickupName || !returnName) return SAME_WINDOW_POPUP_PATCH;
     return `${SAME_WINDOW_POPUP_PATCH}\n${buildAutoSelectScript({
@@ -242,7 +244,7 @@ export function FreeriderRouteLink({
           <SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'left', 'right']}>
             <View style={styles.bar}>
               <Pressable onPress={close} hitSlop={8}>
-                <ThemedText type="link">Close</ThemedText>
+                <ThemedText type="link">{t('Close')}</ThemedText>
               </Pressable>
               <View style={styles.navGroup}>
                 <Pressable
@@ -250,22 +252,22 @@ export function FreeriderRouteLink({
                   disabled={!canGoBack}
                   hitSlop={8}
                   style={!canGoBack && styles.disabled}>
-                  <ThemedText type="small">← Back</ThemedText>
+                  <ThemedText type="small">{t('← Back')}</ThemedText>
                 </Pressable>
                 <Pressable
                   onPress={() => webViewRef.current?.goForward()}
                   disabled={!canGoForward}
                   hitSlop={8}
                   style={!canGoForward && styles.disabled}>
-                  <ThemedText type="small">Forward →</ThemedText>
+                  <ThemedText type="small">{t('Forward →')}</ThemedText>
                 </Pressable>
                 <Pressable
                   onPress={() => webViewRef.current?.reload()}
                   hitSlop={8}>
-                  <ThemedText type="small">Reload</ThemedText>
+                  <ThemedText type="small">{t('Reload')}</ThemedText>
                 </Pressable>
                 <Pressable onPress={() => webViewRef.current?.reload()} hitSlop={8}>
-                  <ThemedText type="small">Route</ThemedText>
+                  <ThemedText type="small">{t('Route')}</ThemedText>
                 </Pressable>
               </View>
             </View>

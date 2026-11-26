@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useI18n } from '@/providers/locale-provider';
 
 const STORAGE_KEY = 'kerodi.notes.v1';
 
@@ -30,6 +31,7 @@ function formatTimestamp(timestamp: number) {
 }
 
 export default function NotesScreen() {
+  const { t } = useI18n();
   const theme = useTheme();
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState('');
@@ -80,11 +82,13 @@ export default function NotesScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
-          <ThemedText type="subtitle">Notes</ThemedText>
+          <ThemedText type="subtitle">{t('Notes')}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             {notes.length === 0
-              ? 'Your notepad is empty'
-              : `${notes.length} note${notes.length === 1 ? '' : 's'}`}
+              ? t('Your notepad is empty')
+              : t(notes.length === 1 ? '{{count}} note' : '{{count}} notes', {
+                  count: notes.length,
+                })}
           </ThemedText>
         </View>
 
@@ -92,7 +96,7 @@ export default function NotesScreen() {
           <TextInput
             value={draft}
             onChangeText={setDraft}
-            placeholder="Write a note…"
+            placeholder={t('Write a note…')}
             placeholderTextColor={theme.textSecondary}
             style={[styles.input, { color: theme.text }]}
             multiline
@@ -108,7 +112,7 @@ export default function NotesScreen() {
               !canAdd && styles.disabled,
               pressed && styles.pressed,
             ]}>
-            <ThemedText type="smallBold">Add note</ThemedText>
+            <ThemedText type="smallBold">{t('Add note')}</ThemedText>
           </Pressable>
         </ThemedView>
 
@@ -129,7 +133,7 @@ export default function NotesScreen() {
                   hitSlop={8}
                   style={({ pressed }) => pressed && styles.pressed}>
                   <ThemedText type="small" themeColor="textSecondary">
-                    Delete
+                    {t('Delete')}
                   </ThemedText>
                 </Pressable>
               </View>
@@ -137,7 +141,7 @@ export default function NotesScreen() {
           )}
           ListEmptyComponent={
             <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
-              Nothing here yet. Write your first note above.
+              {t('Nothing here yet. Write your first note above.')}
             </ThemedText>
           }
         />
