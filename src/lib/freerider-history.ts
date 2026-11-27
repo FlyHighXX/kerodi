@@ -229,9 +229,11 @@ export function listTopPairs(records: RouteHistoryRecord[]): PairTotal[] {
   return [...pairs.values()].sort((a, b) => b.count - a.count || b.lastAt - a.lastAt);
 }
 
-export function formatHistoryClock(timestamp: number | null | undefined) {
+export function formatHistoryDateTime(timestamp: number | null | undefined) {
   if (!timestamp) return '—';
-  return new Date(timestamp).toLocaleTimeString(undefined, {
+  return new Date(timestamp).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -240,17 +242,7 @@ export function formatHistoryClock(timestamp: number | null | undefined) {
 /** Baseline rows existed at first launch, so their detection time is unknown. */
 export function formatDetectionText(record: RouteHistoryRecord) {
   if (record.countsTowardPatterns === false) return translate('Baseline · time unknown');
-  return translate('Detected {{time}}', { time: formatHistoryClock(record.discoveredAt) });
-}
-
-export function formatHistoryDateClock(timestamp: number | null | undefined) {
-  if (!timestamp) return '—';
-  return new Date(timestamp).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return translate('Detected {{time}}', { time: formatHistoryDateTime(record.discoveredAt) });
 }
 
 export function formatDurationMs(duration: number | null | undefined) {
@@ -280,5 +272,5 @@ export function formatTransitionText(transition: RouteTransition) {
         : transition.status === 'unavailable'
           ? 'Unavailable {{time}}'
           : 'Expired {{time}}';
-  return translate(key, { time: formatHistoryClock(transition.at) });
+  return translate(key, { time: formatHistoryDateTime(transition.at) });
 }

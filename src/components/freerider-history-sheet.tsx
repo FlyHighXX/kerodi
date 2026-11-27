@@ -16,8 +16,7 @@ import {
   buildPairPatternSummary,
   formatDetectionText,
   formatDurationMs,
-  formatHistoryClock,
-  formatHistoryDateClock,
+  formatHistoryDateTime,
   formatTransitionText,
   listTopPairs,
   type RouteHistoryRecord,
@@ -101,14 +100,14 @@ export function FreeriderHistorySheet({
                   {formatDetectionText(record)}
                   {record.status === 'active' || !record.disappearedAt
                     ? ''
-                    : ` · ${t(statusLabel(record.status))} ${formatHistoryClock(record.disappearedAt)}`}
+                    : ` · ${t(statusLabel(record.status))} ${formatHistoryDateTime(record.disappearedAt)}`}
                 </ThemedText>
                 {record.reappearanceCount ? (
                   <ThemedText type="small" themeColor="textSecondary">
                     {t('Seen again {{count}}×', { count: record.reappearanceCount })}
                     {record.lastReappearedAt
                       ? t(' · Last {{time}}', {
-                          time: formatHistoryClock(record.lastReappearedAt),
+                          time: formatHistoryDateTime(record.lastReappearedAt),
                         })
                       : ''}
                   </ThemedText>
@@ -160,7 +159,7 @@ export function FreeriderHistorySheet({
 
           <ThemedText type="small" themeColor="textSecondary">
             {t(
-              'Times are when Kerodi detected the route, to the minute. Routes present at first launch are marked Baseline because their true detection time is unknown.',
+              'Dates and times are when Kerodi detected the route. Routes present at first launch are marked Baseline because their true detection time is unknown.',
             )}
           </ThemedText>
 
@@ -227,7 +226,7 @@ export function FreeriderHistorySheet({
                   ) : null}
                   <ThemedText type="small" themeColor="textSecondary">
                     {t('Last detected {{time}}', {
-                      time: formatHistoryDateClock(summary.lastAt),
+                      time: formatHistoryDateTime(summary.lastAt),
                     })}
                   </ThemedText>
                 </>
