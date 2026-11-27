@@ -29,7 +29,7 @@ import {
 } from '@/lib/freerider';
 import {
   formatDetectionText,
-  formatHistoryClock,
+  formatHistoryDateTime,
   routeFromHistory,
   type RouteHistoryRecord,
 } from '@/lib/freerider-history';
@@ -358,13 +358,13 @@ function RouteCard({
             {formatDetectionText(record)}
             {record.status === 'active' || !record.disappearedAt
               ? ''
-              : t(' · Gone {{time}}', { time: formatHistoryClock(record.disappearedAt) })}
+              : t(' · Gone {{time}}', { time: formatHistoryDateTime(record.disappearedAt) })}
           </ThemedText>
           {record.reappearanceCount ? (
             <ThemedText type="small" themeColor="textSecondary">
               {t('Seen again {{count}}×', { count: record.reappearanceCount })}
               {record.lastReappearedAt
-                ? t(' · Last {{time}}', { time: formatHistoryClock(record.lastReappearedAt) })
+                ? t(' · Last {{time}}', { time: formatHistoryDateTime(record.lastReappearedAt) })
                 : ''}
             </ThemedText>
           ) : null}

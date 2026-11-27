@@ -190,8 +190,8 @@ const sv: Record<string, string> = {
     'Förfrågan tog för lång tid. Kontrollera din anslutning och försök igen.',
 
   'Route history': 'Rutthistorik',
-  'Times are when Kerodi detected the route, to the minute. Routes present at first launch are marked Baseline because their true detection time is unknown.':
-    'Tiderna visar när Kerodi upptäckte rutten, ner till minuten. Rutter som fanns vid första starten är märkta Baseline eftersom den verkliga upptäcktstiden är okänd.',
+  'Dates and times are when Kerodi detected the route. Routes present at first launch are marked Baseline because their true detection time is unknown.':
+    'Datum och tider visar när Kerodi upptäckte rutten. Rutter som fanns vid första starten är märkta Baseline eftersom den verkliga upptäcktstiden är okänd.',
   'No detected posts for this pair yet.': 'Inga upptäckta rutter för detta par ännu.',
   '{{count}} detected · {{rate}} per week': '{{count}} upptäckta · {{rate}} per vecka',
   '{{count}} reappearances recorded': '{{count}} återkomster registrerade',
