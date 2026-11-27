@@ -188,6 +188,12 @@ Keep the Jenkins UI restricted to the admin rule in the ACL; if you want HTTPS
 for the UI, put a reverse proxy with a certificate in front of it rather than
 publishing port 8080.
 
+For the current deployment, GitHub PR webhooks reach Jenkins through a
+webhook-only proxy on `127.0.0.1:8788`, which is the only service published
+through Tailscale Funnel. The Jenkins UI and API stay private. See the
+[always-on host runbook](operations/README.md) for startup, verification, and
+recovery steps.
+
 ---
 
 ## 6. Verification checklist
