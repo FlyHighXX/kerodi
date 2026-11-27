@@ -33,6 +33,8 @@ The Jenkins UI, Jenkins API, SSH, worker API, and router/LAN devices are not exp
 
 ## Fast recovery after reboot
 
+If the boot/watchdog setup below is installed, this should already happen automatically. Use this for manual recovery or after changing scripts.
+
 On the host, from the deployed repo (normally `/root/repos/kerodi`):
 
 ```bash
@@ -47,10 +49,101 @@ The script starts or verifies:
 - Jenkins
 - Freerider push worker
 - webhook-only proxy
+- Tailscale Funnel on `8788`
 
 It also prints Tailscale, Funnel, Jenkins, worker, and proxy status.
 
 If you are not on the normal deployed branch, check out the intended branch before running the script.
+
+## Remote recovery setup (one-time, on the host)
+
+Do these steps once while you still have direct access to the host. After this you can recover from any device on the Tailnet.
+
+### 1. Enable Tailscale SSH
+
+On the host:
+
+```bash
+tailscale set --ssh
+```
+
+This is one-time per host. Tailscale SSH listens only on the Tailscale IP; it does not expose SSH through Funnel.
+
+In the Tailscale admin console, ensure the tailnet policy permits SSH. If you have a custom policy, add or merge a rule like this:
+
+```json
+"ssh": [
+  {
+    "action": "check",
+    "checkPeriod": "1h",
+    "src": ["autogroup:member"],
+    "dst": ["autogroup:self"],
+    "users": ["root", "autogroup:nonroot"]
+  }
+]
+```
+
+`check` mode makes root SSH ask for re-authentication periodically. If your policy already has a working SSH rule, keep it.
+
+### 2. Install boot autostart
+
+Install the **Termux:Boot** add-on from F-Droid/Google Play, then open it once so Android registers it.
+
+Copy the boot entrypoint:
+
+```bash
+mkdir -p "$HOME/.termux/boot"
+cp /root/repos/kerodi/docs/tailscale/boot-start.sh "$HOME/.termux/boot/kerodi.sh"
+chmod +x "$HOME/.termux/boot/kerodi.sh"
+```
+
+If your repo path is not `/root/repos/kerodi`, edit `KERODI_REPO_DIR` in `$HOME/.termux/boot/kerodi.sh`.
+
+The boot script:
+
+- takes a Termux wake lock
+- waits 30 seconds for boot networking/storage
+- launches `docs/tailscale/watchdog.sh`
+
+### 3. Start the watchdog now
+
+Do not wait for the next reboot:
+
+```bash
+nohup bash /root/repos/kerodi/docs/tailscale/watchdog.sh \
+  > /root/.kerodi/watchdog.log 2>&1 &
+```
+
+The watchdog calls `start-on-termux.sh` every 60 seconds. Because that script is idempotent, it only starts services that are missing and restores Funnel if it is off.
+
+To change the interval, set `KERODI_WATCHDOG_INTERVAL_SECONDS` before launching it.
+
+### 4. Verify the setup
+
+On the host:
+
+```bash
+pgrep -af 'docs/tailscale/watchdog.sh'
+tail -n 30 /root/.kerodi/watchdog.log
+tailscale status
+tailscale funnel status
+curl -fsS http://127.0.0.1:8787/health
+curl -fsS http://127.0.0.1:8080/login >/dev/null && echo "Jenkins OK"
+```
+
+### 5. Recover remotely
+
+From another Tailnet device:
+
+```bash
+ssh root@kerodi-android-build
+bash /root/repos/kerodi/docs/tailscale/start-on-termux.sh
+tail -n 50 /root/.kerodi/watchdog.log
+```
+
+If Tailscale itself is down, you cannot use Tailscale SSH. The boot script/watchdog are what make Tailscale come back automatically.
+
+If the machine is powered off, software cannot wake it. You need Wake-on-LAN from another always-on device, or a smart plug configured so the machine boots when power returns.
 
 ## Manual start commands
 

@@ -114,14 +114,17 @@ tailscale up --hostname=kerodi-android-build
 # visit the URL it prints, then approve the device in the admin console
 ```
 
-[`start-on-termux.sh`](./tailscale/start-on-termux.sh) starts both the daemon
-and the push worker and is safe to re-run. Inbound connections to local
-services over the tailnet work; outbound traffic from **other Android apps**
-does not automatically use the tunnel — use Option A if the app on this phone
-must reach other tailnet nodes.
+[`start-on-termux.sh`](./tailscale/start-on-termux.sh) starts Tailscale,
+Jenkins, the push worker, the webhook proxy, and Funnel. It is safe to re-run.
+Inbound connections to local services over the tailnet work; outbound traffic
+from **other Android apps** does not automatically use the tunnel — use Option
+A if the app on this phone must reach other tailnet nodes.
 
-Termux:Boot is not installed on this device, so re-run the start script after a
-reboot (or install the add-on and place a copy in `~/.termux/boot/`).
+For automatic recovery after reboot or process crashes, install
+[`boot-start.sh`](./tailscale/boot-start.sh) with Termux:Boot and run
+[`watchdog.sh`](./tailscale/watchdog.sh). See the
+[always-on host runbook](operations/README.md#remote-recovery-setup-one-time-on-the-host)
+for Tailscale SSH setup and the exact host-side steps.
 
 ### Current deployment
 

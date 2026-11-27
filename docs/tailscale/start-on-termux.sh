@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Start the Kerodi always-on services on the Android/Termux build host:
-# Tailscale, Jenkins, the Freerider push worker, and the webhook-only proxy.
-# Run from anywhere; paths are resolved relative to this repository. Safe to re-run.
+# Tailscale, Jenkins, the Freerider push worker, the webhook-only proxy, and
+# Tailscale Funnel. Run from anywhere; paths are resolved relative to this
+# repository. Safe to re-run.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -72,6 +73,12 @@ fi
 
 echo "==> Tailscale"
 tailscale status 2>&1 | head -10
+
+if ! tailscale funnel status 2>/dev/null | grep -q 'Funnel on'; then
+  echo "==> Starting Tailscale Funnel on 8788"
+  tailscale funnel --bg --yes 8788 || echo "!! Funnel failed; check 'tailscale funnel status'."
+fi
+
 echo "==> Funnel"
 tailscale funnel status 2>&1 | head -10
 echo "==> Jenkins"
