@@ -114,14 +114,17 @@ tailscale up --hostname=kerodi-android-build
 # visit the URL it prints, then approve the device in the admin console
 ```
 
-[`start-on-termux.sh`](./tailscale/start-on-termux.sh) starts both the daemon
-and the push worker and is safe to re-run. Inbound connections to local
-services over the tailnet work; outbound traffic from **other Android apps**
-does not automatically use the tunnel — use Option A if the app on this phone
-must reach other tailnet nodes.
+[`start-on-termux.sh`](./tailscale/start-on-termux.sh) starts Tailscale,
+Jenkins, the push worker, the webhook proxy, and Funnel. It is safe to re-run.
+Inbound connections to local services over the tailnet work; outbound traffic
+from **other Android apps** does not automatically use the tunnel — use Option
+A if the app on this phone must reach other tailnet nodes.
 
-Termux:Boot is not installed on this device, so re-run the start script after a
-reboot (or install the add-on and place a copy in `~/.termux/boot/`).
+For automatic recovery after reboot or process crashes, install
+[`boot-start.sh`](./tailscale/boot-start.sh) with Termux:Boot and run
+[`watchdog.sh`](./tailscale/watchdog.sh). See the
+[always-on host runbook](operations/README.md#remote-recovery-setup-one-time-on-the-host)
+for Tailscale SSH setup and the exact host-side steps.
 
 ### Current deployment
 
@@ -130,7 +133,7 @@ reboot (or install the add-on and place a copy in `~/.termux/boot/`).
 | Node / Tailscale IP | `kerodi-android-build` — `100.77.0.70` |
 | MagicDNS | `kerodi-android-build.tail8d2385.ts.net` |
 | Tailnet suffix | `tail8d2385.ts.net` |
-| Push worker | `http://100.77.0.70:8787` (or the MagicDNS name) |
+| Push worker | `http://10.0.0.8:8787` on LAN; Tailnet `http://100.77.0.70:8787` (or MagicDNS) |
 | Other observed node | `diacos-s25` — `100.99.130.86` |
 
 The node joined successfully and `tailscale ping` reaches `diacos-s25` via
@@ -151,8 +154,9 @@ authentication beyond the per-user push token, so keep it behind Tailscale.
 On a Linux host, install [`kerodi-worker.service`](./tailscale/kerodi-worker.service)
 as described in the file. On the Termux host use the start script above.
 
-The app is pre-filled with `http://100.77.0.70:8787` and stores any override
-per device in **Settings → Worker connection**. Use a tailnet address:
+The app is pre-filled with `http://10.0.0.8:8787` on fresh installs and stores
+any override per device in **Settings → Worker connection**. Tailscale must be
+connected; no worker token is needed. For another device, use a tailnet address:
 
 ```text
 http://kerodi-worker.tailnet-name.ts.net:8787

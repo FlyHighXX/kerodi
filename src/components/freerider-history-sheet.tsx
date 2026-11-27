@@ -74,6 +74,9 @@ export function FreeriderHistorySheet({
       <ThemedText type="smallBold">
         {focusedRecord ? `${focusedRecord.fromCity} → ${focusedRecord.toCity}` : t('Recent routes')}
       </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {t('Newest first.')}
+      </ThemedText>
       {focusedRecord ? null : (
         <ThemedText type="small" themeColor="textSecondary">
           {t('Tap a route to see its state changes.')}

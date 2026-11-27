@@ -21,6 +21,8 @@ Tailscale: 100.77.0.70
 Funnel:    https://kerodi-android-build.tail8d2385.ts.net/
 ```
 
+The app default worker URL is `http://10.0.0.8:8787` on fresh installs. Tailscale must be connected on the device running the app; no worker token is entered there.
+
 Only this Funnel path is intentionally public:
 
 ```text
@@ -30,6 +32,8 @@ POST /generic-webhook-trigger/invoke?token=<secret>
 The Jenkins UI, Jenkins API, SSH, worker API, and router/LAN devices are not exposed through Funnel.
 
 ## Fast recovery after reboot
+
+If the boot/watchdog setup below is installed, this should already happen automatically. Use this for manual recovery or after changing scripts.
 
 On the host, from the deployed repo (normally `/root/repos/kerodi`):
 
@@ -45,10 +49,101 @@ The script starts or verifies:
 - Jenkins
 - Freerider push worker
 - webhook-only proxy
+- Tailscale Funnel on `8788`
 
 It also prints Tailscale, Funnel, Jenkins, worker, and proxy status.
 
 If you are not on the normal deployed branch, check out the intended branch before running the script.
+
+## Remote recovery setup (one-time, on the host)
+
+Do these steps once while you still have direct access to the host. After this you can recover from any device on the Tailnet.
+
+### 1. Enable Tailscale SSH
+
+On the host:
+
+```bash
+tailscale set --ssh
+```
+
+This is one-time per host. Tailscale SSH listens only on the Tailscale IP; it does not expose SSH through Funnel.
+
+In the Tailscale admin console, ensure the tailnet policy permits SSH. If you have a custom policy, add or merge a rule like this:
+
+```json
+"ssh": [
+  {
+    "action": "check",
+    "checkPeriod": "1h",
+    "src": ["autogroup:member"],
+    "dst": ["autogroup:self"],
+    "users": ["root", "autogroup:nonroot"]
+  }
+]
+```
+
+`check` mode makes root SSH ask for re-authentication periodically. If your policy already has a working SSH rule, keep it.
+
+### 2. Install boot autostart
+
+Install the **Termux:Boot** add-on from F-Droid/Google Play, then open it once so Android registers it.
+
+Copy the boot entrypoint:
+
+```bash
+mkdir -p "$HOME/.termux/boot"
+cp /root/repos/kerodi/docs/tailscale/boot-start.sh "$HOME/.termux/boot/kerodi.sh"
+chmod +x "$HOME/.termux/boot/kerodi.sh"
+```
+
+If your repo path is not `/root/repos/kerodi`, edit `KERODI_REPO_DIR` in `$HOME/.termux/boot/kerodi.sh`.
+
+The boot script:
+
+- takes a Termux wake lock
+- waits 30 seconds for boot networking/storage
+- launches `docs/tailscale/watchdog.sh`
+
+### 3. Start the watchdog now
+
+Do not wait for the next reboot:
+
+```bash
+nohup bash /root/repos/kerodi/docs/tailscale/watchdog.sh \
+  > /root/.kerodi/watchdog.log 2>&1 &
+```
+
+The watchdog calls `start-on-termux.sh` every 60 seconds. Because that script is idempotent, it only starts services that are missing and restores Funnel if it is off.
+
+To change the interval, set `KERODI_WATCHDOG_INTERVAL_SECONDS` before launching it.
+
+### 4. Verify the setup
+
+On the host:
+
+```bash
+pgrep -af 'docs/tailscale/watchdog.sh'
+tail -n 30 /root/.kerodi/watchdog.log
+tailscale status
+tailscale funnel status
+curl -fsS http://127.0.0.1:8787/health
+curl -fsS http://127.0.0.1:8080/login >/dev/null && echo "Jenkins OK"
+```
+
+### 5. Recover remotely
+
+From another Tailnet device:
+
+```bash
+ssh root@kerodi-android-build
+bash /root/repos/kerodi/docs/tailscale/start-on-termux.sh
+tail -n 50 /root/.kerodi/watchdog.log
+```
+
+If Tailscale itself is down, you cannot use Tailscale SSH. The boot script/watchdog are what make Tailscale come back automatically.
+
+If the machine is powered off, software cannot wake it. You need Wake-on-LAN from another always-on device, or a smart plug configured so the machine boots when power returns.
 
 ## Manual start commands
 
@@ -157,6 +252,8 @@ Both public Jenkins UI/API checks should return `404`.
 
 To verify the GitHub webhook end to end, use GitHub → repository settings → Webhooks → latest delivery → **Ping** or send a ping from the GitHub API. The latest delivery should show status `OK` and response code `200`.
 
+To verify the blocking check, open or synchronize a real PR. Its checks list should show `jenkins/android-apk` as pending, then successful or failed. Merge remains blocked until it is successful.
+
 ## GitHub webhook
 
 Webhook ID on `FlyHighXX/kerodi`:
@@ -180,12 +277,37 @@ When a PR event matches, Jenkins receives:
 
 ```text
 BRANCH=<pull_request.head.ref>
+HEAD_SHA=<pull_request.head.sha>
 PR_NUMBER=<pull request number>
 repo=FlyHighXX/kerodi
 action=<pull_request action>
 ```
 
 The Jenkins job checks out `refs/pull/<PR_NUMBER>/merge`, so fork PRs are supported while the PR is open.
+
+## Blocking merges
+
+Merging into `main` requires this status check:
+
+```text
+jenkins/android-apk
+```
+
+The job posts a `pending` status as soon as the webhook arrives, then replaces it with `success` or `failure` when the build finishes. Branch protection on `main` requires the check to be successful and requires the branch to be up to date. Admins are also subject to the check.
+
+If the check never appears, the PR webhook was not delivered or the `HEAD_SHA` variable was not contributed. Check the latest delivery in GitHub and the Generic Webhook Trigger variables in Jenkins.
+
+To verify branch protection after recovery:
+
+```bash
+# On the host, via Jenkins Script Console, or with GitHub CLI where available.
+curl -sS \
+  -H "Authorization: Bearer <GitHub PAT>" \
+  -H "Accept: application/vnd.github+json" \
+  https://api.github.com/repos/FlyHighXX/kerodi/branches/main/protection
+```
+
+`required_status_checks.contexts` must include `jenkins/android-apk`.
 
 ## Jenkins job config
 
@@ -202,6 +324,7 @@ Parameters:
 | `BRANCH` | `main` | Branch for manual builds |
 | `BUILD_DEBUG` | `false` | Normally leave off |
 | `PR_NUMBER` | empty | Supplied by the webhook; empty for manual builds |
+| `HEAD_SHA` | empty | PR head commit SHA supplied by the webhook; used for the blocking GitHub status |
 
 Triggers:
 

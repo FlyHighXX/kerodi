@@ -46,9 +46,9 @@ A route that disappears and later returns sends **Freerider route available agai
 
 ## 2. App configuration
 
-The app starts with `http://100.77.0.70:8787` pre-filled in **Settings → Worker connection**, and any override is saved on the device. A build-time `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT` can replace that default for custom builds.
+The app starts with `http://10.0.0.8:8787` pre-filled in **Settings → Worker connection**, and any override is saved on the device. Tailscale must be connected on the device running the app; no worker token is needed. A build-time `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT` can replace that default for custom builds.
 
-Use the Tailscale address of the machine running the worker. In this setup, the worker and Jenkins share one host:
+Use a Tailscale address when the app is not on the same LAN as the worker. In this setup, the worker and Jenkins share one host:
 
 ```text
 Worker: http://100.77.0.70:8787
