@@ -52,7 +52,7 @@ A route that disappears and later returns sends **Freerider route available agai
 
 ## 2. App configuration
 
-The app starts with `http://10.0.0.8:8787` pre-filled in **Settings → Worker connection**, and any override is saved on the device. Tailscale must be connected on the device running the app; no worker token is needed. A build-time `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT` can replace that default for custom builds.
+The app starts with `http://100.77.0.70:8787` pre-filled in **Settings → Worker connection**, and any override is saved on the device. Tailscale must be connected on the device running the app; no worker token is needed. A build-time `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT` can replace that default for custom builds.
 
 The Freerider tab reads `/routes` from the worker and uses `/poll-now` for **Check now**/pull-to-refresh, so the device never makes its own hertzfreerider request. The locations list is cached on device for seven days.
 

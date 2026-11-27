@@ -69,7 +69,7 @@ export default function SettingsScreen() {
 
   const saveWorkerUrl = useCallback(async () => {
     if (!isValidWorkerUrl(workerUrlDraft)) {
-      setWorkerUrlError(t('Enter a full URL, for example http://10.0.0.8:8787'));
+      setWorkerUrlError(t('Enter a full URL, for example http://100.77.0.70:8787'));
       return;
     }
     setWorkerUrlBusy(true);
@@ -198,13 +198,13 @@ export default function SettingsScreen() {
             <ThemedText type="smallBold">{t('Worker connection')}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               {t(
-                'Address of the machine running the Freerider worker. Fresh installs are pre-filled with http://10.0.0.8:8787 and saved per device. Tailscale must be connected; no worker token is needed. Notifications are set up automatically the first time you start a listener on the Freerider tab.',
+                'Address of the machine running the Freerider worker. Fresh installs are pre-filled with http://100.77.0.70:8787 and saved per device. Tailscale must be connected; no worker token is needed. Notifications are set up automatically the first time you start a listener on the Freerider tab.',
               )}
             </ThemedText>
             <TextInput
               value={workerUrlDraft}
               onChangeText={setWorkerUrlDraft}
-              placeholder="http://10.0.0.8:8787"
+              placeholder="http://100.77.0.70:8787"
               placeholderTextColor={theme.textSecondary}
               autoCorrect={false}
               autoCapitalize="none"

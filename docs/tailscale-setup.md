@@ -133,7 +133,7 @@ for Tailscale SSH setup and the exact host-side steps.
 | Node / Tailscale IP | `kerodi-android-build` — `100.77.0.70` |
 | MagicDNS | `kerodi-android-build.tail8d2385.ts.net` |
 | Tailnet suffix | `tail8d2385.ts.net` |
-| Push worker | `http://10.0.0.8:8787` on LAN; Tailnet `http://100.77.0.70:8787` (or MagicDNS) |
+| Push worker | `http://100.77.0.70:8787` on Tailnet (or MagicDNS); LAN `http://10.0.0.8:8787` when on the same network |
 | Other observed node | `diacos-s25` — `100.99.130.86` |
 
 The node joined successfully and `tailscale ping` reaches `diacos-s25` via
@@ -154,12 +154,12 @@ authentication beyond the per-user push token, so keep it behind Tailscale.
 On a Linux host, install [`kerodi-worker.service`](./tailscale/kerodi-worker.service)
 as described in the file. On the Termux host use the start script above.
 
-The app is pre-filled with `http://10.0.0.8:8787` on fresh installs and stores
+The app is pre-filled with `http://100.77.0.70:8787` on fresh installs and stores
 any override per device in **Settings → Worker connection**. Tailscale must be
-connected; no worker token is needed. For another device, use a tailnet address:
+connected; no worker token is needed. The MagicDNS address also works:
 
 ```text
-http://kerodi-worker.tailnet-name.ts.net:8787
+http://kerodi-android-build.tail8d2385.ts.net:8787
 ```
 
 or the node's `100.x.y.z:8787` address. Tap **Test** to verify. Saved addresses
