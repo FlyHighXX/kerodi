@@ -157,8 +157,8 @@ const sv: Record<string, string> = {
   'Show expired routes': 'Visa utgångna rutter',
   'Exclude Norway (NO)': 'Uteslut Norge (NO)',
   'Worker connection': 'Worker-anslutning',
-  'Address of the machine running the Freerider worker. Use its Tailscale address when you are away from home. Notifications are set up automatically the first time you start a listener on the Freerider tab.':
-    'Adressen till datorn som kör Freerider-workern. Använd dess Tailscale-adress när du är borta från hemmet. Aviseringar aktiveras automatiskt första gången du startar en bevakning på fliken Freerider.',
+  'Address of the machine running the Freerider worker. It is pre-filled with the Tailnet address and saved per device. Notifications are set up automatically the first time you start a listener on the Freerider tab.':
+    'Adressen till datorn som kör Freerider-workern. Den är förifylld med Tailnet-adressen och sparas per enhet. Aviseringar aktiveras automatiskt första gången du startar en bevakning på fliken Freerider.',
   'Saved: {{url}}': 'Sparad: {{url}}',
   'No worker URL saved yet.': 'Ingen worker-URL sparad ännu.',
   Test: 'Testa',

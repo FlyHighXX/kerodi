@@ -2,6 +2,7 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useColorScheme } from 'react-native';
 
 import { Colors } from '@/constants/theme';
+import { scrollFreeriderToTop } from '@/lib/freerider-scroll-to-top';
 import { useI18n } from '@/providers/locale-provider';
 
 export default function AppTabs() {
@@ -38,7 +39,13 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="freerider">
+      <NativeTabs.Trigger
+        name="freerider"
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            if (navigation.isFocused()) scrollFreeriderToTop();
+          },
+        })}>
         <NativeTabs.Trigger.Label>Freerider</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="car.fill" md="directions_car" />
       </NativeTabs.Trigger>

@@ -46,7 +46,7 @@ A route that disappears and later returns sends **Freerider route available agai
 
 ## 2. App configuration
 
-The worker address is saved on the device in **Settings → Worker connection**. There is no baked-in LAN address, because private addresses depend on the network the phone is on. A build-time `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT` is used only as the initial value if one was provided.
+The app starts with `http://100.77.0.70:8787` pre-filled in **Settings → Worker connection**, and any override is saved on the device. A build-time `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT` can replace that default for custom builds.
 
 Use the Tailscale address of the machine running the worker. In this setup, the worker and Jenkins share one host:
 
@@ -59,7 +59,7 @@ Use `Test` in Settings to check the connection. Saved addresses work across buil
 
 In the app:
 
-1. Open **Settings → Worker connection**, enter the worker URL, and tap **Save**.
+1. Open **Settings → Worker connection**; the worker URL is already filled in. Tap **Save** to keep it, or change it first.
 2. Set From/To filters in Settings.
 3. On the Freerider tab, tap **Start** next to the hidden duration control. The first time, Android asks for notification permission and the app registers the push token automatically.
 4. Use `1h ▾` to choose the listener duration.

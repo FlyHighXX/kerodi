@@ -55,6 +55,7 @@ export function FreeriderHistorySheet({
   const { t } = useI18n();
   const focusedRecord =
     focusRecordId == null ? undefined : records.find((record) => record.id === focusRecordId);
+  const focusMode = focusedRecord != null;
   const [fromDraft, setFromDraft] = useState(focusedRecord?.fromCity ?? from);
   const [toDraft, setToDraft] = useState(focusedRecord?.toCity ?? to);
   const [expandedId, setExpandedId] = useState<number | null>(focusRecordId ?? null);
@@ -64,20 +65,21 @@ export function FreeriderHistorySheet({
     [fromDraft, now, records, toDraft],
   );
   const topPairs = useMemo(() => listTopPairs(records).slice(0, 8), [records]);
-  const recent = useMemo(() => {
-    if (!focusedRecord) return records.slice(0, 10);
-    return [
-      focusedRecord,
-      ...records.filter((record) => record.id !== focusedRecord.id).slice(0, 9),
-    ];
-  }, [focusedRecord, records]);
+  const recent = useMemo(
+    () => (focusedRecord ? [focusedRecord] : records.slice(0, 10)),
+    [focusedRecord, records],
+  );
 
   const recentCard = (
     <ThemedView type="background" style={styles.card}>
-      <ThemedText type="smallBold">{t('Recent routes')}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        {t('Tap a route to see its state changes.')}
+      <ThemedText type="smallBold">
+        {focusedRecord ? `${focusedRecord.fromCity} → ${focusedRecord.toCity}` : t('Recent routes')}
       </ThemedText>
+      {focusedRecord ? null : (
+        <ThemedText type="small" themeColor="textSecondary">
+          {t('Tap a route to see its state changes.')}
+        </ThemedText>
+      )}
       {recent.length === 0 ? (
         <ThemedText type="small" themeColor="textSecondary">
           {t('Nothing recorded yet.')}
@@ -166,8 +168,10 @@ export function FreeriderHistorySheet({
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}>
-            {focusRecordId != null ? recentCard : null}
-            <View style={styles.inputRow}>
+            {focusMode ? recentCard : null}
+            {focusMode ? null : (
+              <>
+                <View style={styles.inputRow}>
               <TextInput
                 value={fromDraft}
                 onChangeText={setFromDraft}
@@ -252,7 +256,9 @@ export function FreeriderHistorySheet({
               </ThemedView>
             ) : null}
 
-            {focusRecordId == null ? recentCard : null}
+                {recentCard}
+              </>
+            )}
           </ScrollView>
         </ThemedView>
       </View>
