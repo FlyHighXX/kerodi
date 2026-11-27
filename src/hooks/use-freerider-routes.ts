@@ -1,32 +1,32 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import {
-  fetchFreeriderLocations,
-  fetchFreeriderRoutes,
-  type FreerideLocation,
-  type RouteOffer,
-} from '@/lib/freerider';
+import { fetchFreeriderLocations, type FreerideLocation, type RouteOffer } from '@/lib/freerider';
 import {
   clearLocalRouteHistory,
   latestHistoryUpdatedAt,
   mergeWorkerHistory,
   type RouteHistoryRecord,
 } from '@/lib/freerider-history';
-import { fetchWorkerRouteHistory } from '@/lib/freerider-sessions';
+import { fetchWorkerRouteHistory, fetchWorkerRoutes } from '@/lib/freerider-sessions';
 import {
+  LOCATIONS_CACHE_TTL_MS,
+  readCachedLocations,
   readNewRouteIds,
   readSeenRouteIds,
+  writeCachedLocations,
   writeNewRouteIds,
   writeSeenRouteIds,
 } from '@/lib/freerider-storage';
 import { translate } from '@/lib/i18n';
 
-const STALE_AFTER_MS = 30 * 1000;
+const STALE_AFTER_MS = 60 * 1000;
 const REQUEST_TIMEOUT_MS = 15 * 1000;
 
 /**
- * Fetches the Hertz Freerider feed when the tab is opened or refreshed.
+ * Reads the worker's cached Hertz Freerider feed when the tab is opened or
+ * refreshed. The app never polls hertzfreerider directly; the worker throttles
+ * refreshes and serves all listeners from one fetch.
  *
  * New-route alerts are handled by the external push worker, not by this hook.
  * This hook only loads data for display and highlights routes that appeared
@@ -74,16 +74,24 @@ export function useFreeriderRoutes() {
   }, []);
 
   // The full store list powers from/to suggestions even for places with no
-  // active route right now. It only needs loading once per mount.
+  // active route right now. Cache it for a week to avoid repeat public calls.
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
 
-    fetchFreeriderLocations(controller.signal)
-      .then((list) => {
+    void (async () => {
+      const cached = await readCachedLocations();
+      if (cached?.locations.length && active) setLocations(cached.locations);
+      if (cached && Date.now() - cached.fetchedAt < LOCATIONS_CACHE_TTL_MS) return;
+
+      try {
+        const list = await fetchFreeriderLocations(controller.signal);
+        await writeCachedLocations(list);
         if (active) setLocations(list);
-      })
-      .catch(() => {});
+      } catch {
+        // Keep the cached list if the location endpoint is unavailable.
+      }
+    })();
 
     return () => {
       active = false;
@@ -105,7 +113,7 @@ export function useFreeriderRoutes() {
 
     try {
       const [routesResult, historyResult] = await Promise.allSettled([
-        fetchFreeriderRoutes(controller.signal),
+        fetchWorkerRoutes({ force: options?.force, signal: controller.signal }),
         fetchWorkerRouteHistory(historyUpdatedAtRef.current, controller.signal),
       ]);
       if (routesResult.status === 'rejected') throw routesResult.reason;

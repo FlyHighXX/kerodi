@@ -54,7 +54,7 @@ if ! pgrep -f 'freerider-push-worker.mjs' >/dev/null 2>&1; then
   cd "$REPO_DIR"
   SESSIONS_FILE="$RUN_DIR/freerider-sessions.json" \
   HISTORY_FILE="$RUN_DIR/freerider-history.json" \
-  POLL_SECONDS=10 \
+  POLL_SECONDS=60 \
   CONTROL_HOST=0.0.0.0 \
   CONTROL_PORT=8787 \
     nohup node scripts/freerider-push-worker.mjs >"$RUN_DIR/worker.log" 2>&1 &

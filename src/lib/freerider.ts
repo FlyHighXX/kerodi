@@ -4,9 +4,9 @@ import { deviceLocale, translate } from '@/lib/i18n';
  * Layer on top of the public data that powers hertzfreerider.se.
  *
  * The site's route search reads `/api/transport-routes/` and `/api/locations/`
- * without authentication, so we can show the same offers natively and add our
- * own filtering/new-route detection on top. Booking still happens on
- * hertzfreerider.se.
+ * without authentication. The Freerider tab normally reads the worker's cached
+ * feed to avoid extra public traffic; these helpers remain for the feed and
+ * location fallback data. Booking still happens on hertzfreerider.se.
  */
 
 export const FREERIDER_API_URL = 'https://hertzfreerider.se/api/transport-routes/';
@@ -16,6 +16,7 @@ export const FREERIDER_SITE_URL = 'https://hertzfreerider.se/';
 // Shared between the foreground tab and the background notification task.
 export const SEEN_ROUTES_KEY = 'kerodi.freerider.seen.v1';
 export const ROUTE_HISTORY_KEY = 'kerodi.freerider.route-history.v1';
+export const LOCATIONS_CACHE_KEY = 'kerodi.freerider.locations.v1';
 export const LOCATION_FILTERS_KEY = 'kerodi.freerider.location-filters.v1';
 export const POLL_SECONDS_KEY = 'kerodi.freerider.poll-seconds.v1';
 export const NOTIFIED_ROUTES_KEY = 'kerodi.freerider.notified.v1';

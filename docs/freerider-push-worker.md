@@ -1,6 +1,6 @@
 # Freerider push worker
 
-Second-level alerts are sent by the tiny worker in `scripts/freerider-push-worker.mjs`. The app itself does not poll for alerts.
+Low-traffic alerts are sent by the tiny worker in `scripts/freerider-push-worker.mjs`. The app does not poll hertzfreerider directly; it reads the worker's cached feed. One throttled poll serves all active listeners and all app reads.
 
 For reaching the worker from other networks, run it behind Tailscale and use a tailnet address in **Settings → Worker connection**. See [Tailscale setup](./tailscale-setup.md).
 
@@ -9,7 +9,7 @@ For reaching the worker from other networks, run it behind Tailscale and use a t
 ```bash
 SESSIONS_FILE="./.freerider-sessions.json" \
 HISTORY_FILE="./.freerider-history.json" \
-POLL_SECONDS=10 \
+POLL_SECONDS=60 \
 CONTROL_PORT=8787 \
 npm run freerider:worker
 ```
@@ -19,11 +19,15 @@ The worker listens on `0.0.0.0:8787` and exposes:
 | Method | Path | Body | Purpose |
 |---|---|---|---|
 | `GET` | `/health` | — | Health check |
+| `GET` | `/routes` | — | Cached normalized feed; refreshes at most once per throttle window |
+| `POST` | `/poll-now` | `{}` | Throttled manual refresh + alert processing for **Check now** |
 | `POST` | `/` | `{ token, from, to }` | Legacy preferences ack from Settings; does not start a listener |
 | `POST` | `/start` | `{ token, from, to, durationMinutes, excludeCountry? }` | Start a listener with a fresh baseline |
 | `POST` | `/stop` | `{ token, id }` | Stop one listener |
 | `GET` | `/history?since=<ms>` | — | Worker-owned history; returns records updated at or after `since`, or all records when omitted |
 | `POST` | `/status` | `{ token, since? }` | List active listeners (legacy builds also receive history here) |
+
+All fetches — scheduled polls, app reads, Start baselines, and **Check now** — share one throttle of `ROUTE_REFRESH_SECONDS` (default 60s). Scheduled polls add ±10% jitter. Feed errors back off exponentially up to `MAX_BACKOFF_SECONDS` (default 600s), and `Retry-After` is honoured. With one active listener this is about 1,440 hertz requests/day instead of 8,640.
 
 Multiple listeners can run for the same token. One feed poll serves all active listeners, and matches are grouped into one push per user to avoid duplicates. `excludeCountry` (for example `"NO"`) suppresses alerts for routes whose pickup or return country matches, and is also returned in `/status` so the app can keep active listeners in sync with the setting.
 
@@ -37,7 +41,9 @@ A route that disappears and later returns sends **Freerider route available agai
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `POLL_SECONDS` | `10` | Fallback/new-session interval |
+| `POLL_SECONDS` | `60` | Listener poll interval and shared refresh throttle |
+| `ROUTE_REFRESH_SECONDS` | same as `POLL_SECONDS` | Minimum seconds between any two hertz fetches |
+| `MAX_BACKOFF_SECONDS` | `600` | Maximum backoff after repeated feed errors |
 | `SESSIONS_FILE` | `./.freerider-sessions.json` | Session + seen-state file |
 | `HISTORY_FILE` | `./.freerider-history.json` | Persistent worker-owned history file; use an absolute path in systemd |
 | `CONTROL_PORT` | `8787` | HTTP control port |
@@ -47,6 +53,8 @@ A route that disappears and later returns sends **Freerider route available agai
 ## 2. App configuration
 
 The app starts with `http://10.0.0.8:8787` pre-filled in **Settings → Worker connection**, and any override is saved on the device. Tailscale must be connected on the device running the app; no worker token is needed. A build-time `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT` can replace that default for custom builds.
+
+The Freerider tab reads `/routes` from the worker and uses `/poll-now` for **Check now**/pull-to-refresh, so the device never makes its own hertzfreerider request. The locations list is cached on device for seven days.
 
 Use a Tailscale address when the app is not on the same LAN as the worker. In this setup, the worker and Jenkins share one host:
 

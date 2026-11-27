@@ -188,7 +188,7 @@ Freerider worker:
 cd /root/repos/kerodi
 SESSIONS_FILE=/root/.kerodi/freerider-sessions.json \
 HISTORY_FILE=/root/.kerodi/freerider-history.json \
-POLL_SECONDS=10 \
+POLL_SECONDS=60 \
 CONTROL_HOST=0.0.0.0 \
 CONTROL_PORT=8787 \
   nohup node scripts/freerider-push-worker.mjs \

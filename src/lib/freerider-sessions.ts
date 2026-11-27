@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import type { RouteOffer } from '@/lib/freerider';
 import { historyRecords, type RouteHistoryRecord } from '@/lib/freerider-history';
 import { readWorkerUrl } from '@/lib/freerider-worker-url';
 import { translate } from '@/lib/i18n';
@@ -7,8 +8,8 @@ import { translate } from '@/lib/i18n';
 const CACHE_KEY = 'kerodi.freerider.sessions.v1';
 const DURATION_KEY = 'kerodi.freerider.watch-duration-minutes.v1';
 
-/** Fixed worker interval for on-demand listeners. */
-export const SESSION_POLL_SECONDS = 10;
+/** Low-traffic worker interval for on-demand listeners. */
+export const SESSION_POLL_SECONDS = 60;
 export const DEFAULT_DURATION_MINUTES = 60;
 export const DURATION_PRESETS = [15, 60, 240, 480, 1440];
 
@@ -47,7 +48,21 @@ export async function checkWorkerHealth() {
   }
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const endpoint = await readWorkerUrl();
+  if (!endpoint) throw new Error(translate('Set the worker URL in Settings first.'));
+
+  const response = await fetch(`${endpoint}${path}`, { signal });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.error) {
+    throw new Error(
+      payload.error || translate('Worker returned {{status}}', { status: response.status }),
+    );
+  }
+  return payload as T;
+}
+
+async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const endpoint = await readWorkerUrl();
   if (!endpoint) throw new Error(translate('Set the worker URL in Settings first.'));
 
@@ -55,6 +70,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.error) {
@@ -63,6 +79,39 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     );
   }
   return payload as T;
+}
+
+type WorkerRoutesPayload = {
+  routes?: unknown;
+  fetchedAt?: unknown;
+  backedOffUntil?: unknown;
+};
+
+function isRouteOffer(value: unknown): value is RouteOffer {
+  if (!value || typeof value !== 'object') return false;
+  const route = value as Partial<RouteOffer>;
+  return (
+    typeof route.id === 'number' &&
+    !!route.pickupLocation &&
+    !!route.returnLocation &&
+    typeof route.availableAt === 'string'
+  );
+}
+
+/**
+ * Read the worker's cached feed. Manual checks hit the worker's throttled
+ * /poll-now endpoint; no hertzfreerider request is made from the device.
+ */
+export async function fetchWorkerRoutes(options?: {
+  force?: boolean;
+  signal?: AbortSignal;
+}): Promise<RouteOffer[]> {
+  const payload = options?.force
+    ? await post<WorkerRoutesPayload>('/poll-now', {}, options?.signal)
+    : await get<WorkerRoutesPayload>('/routes', options?.signal);
+
+  const routes = Array.isArray(payload.routes) ? payload.routes.filter(isRouteOffer) : [];
+  return routes.sort((a, b) => a.availableAt.localeCompare(b.availableAt));
 }
 
 /** Read worker-owned history deltas. No history is stored on the device. */
