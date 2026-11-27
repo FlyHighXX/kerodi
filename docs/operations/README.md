@@ -8,7 +8,7 @@ This is the recovery README for the machine that keeps Kerodi running. Use it af
 | --- | --- | --- | --- |
 | Tailscale daemon | `tailscaled`, userspace networking | Private tailnet connectivity | No |
 | Jenkins controller | `127.0.0.1:8080` | Android APK builds, PR webhook trigger | No — only via webhook proxy |
-| Freerider push worker | `0.0.0.0:8787` | Session/history API for the app | Tailnet only |
+| Freerider push worker | `0.0.0.0:8787` | Session/history/cached-feed API for the app | Tailnet only |
 | Webhook-only proxy | `127.0.0.1:8788` | Allows only the Jenkins webhook path with the correct token | No — behind Funnel |
 | Tailscale Funnel | `https://kerodi-android-build.tail8d2385.ts.net/` | Public HTTPS entry to the webhook proxy | Yes, webhook path only |
 
@@ -22,6 +22,8 @@ Funnel:    https://kerodi-android-build.tail8d2385.ts.net/
 ```
 
 The app default worker URL is `http://100.77.0.70:8787` on fresh installs. Tailscale must be connected on the device running the app; no worker token is entered there.
+
+The worker uses a shared 60-second throttle for every hertzfreerider fetch, including scheduled polls, app reads, Start baselines, and **Check now**. It serves the cached feed through `/routes`, triggers throttled refreshes through `/poll-now`, and backs off on feed errors.
 
 Only this Funnel path is intentionally public:
 

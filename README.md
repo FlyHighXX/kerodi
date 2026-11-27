@@ -179,6 +179,12 @@ default and can be turned off at any time from the tab. In BYOK mode the key and
 notes go only to that provider, straight from your device. The rest of the app keeps its
 notes on-device.
 
+## Freerider alerts
+
+The Freerider tab reads a worker-owned cache of the public Hertz feed. Devices do not poll hertzfreerider directly: the worker uses one shared 60-second refresh throttle for scheduled polls, app reads, Start baselines, and **Check now**. It adds ±10% jitter, honours `Retry-After`, backs off on failures, and exposes `/routes` and `/poll-now` for the app. The store list is cached on-device for seven days.
+
+Fresh installs default to `http://100.77.0.70:8787` in **Settings → Worker connection**. Tailscale must be connected; no worker token is needed. A custom build can override the default with `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT`. The worker is the authoritative history store and keeps every route state indefinitely; the app keeps worker history only in memory for the current session. See [Freerider push worker](docs/freerider-push-worker.md) for the full API and configuration.
+
 ## CI / builds
 
 The Android APK is built automatically on the on-device Jenkins worker when a pull request is opened, reopened, or receives new commits. PR builds publish the `jenkins/android-apk` status check, which is required before merging into `main`. Merged `main` is also built by SCM polling. PR branches can be built on demand from Jenkins using the `BRANCH` build parameter.
