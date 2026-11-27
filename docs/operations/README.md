@@ -157,6 +157,8 @@ Both public Jenkins UI/API checks should return `404`.
 
 To verify the GitHub webhook end to end, use GitHub → repository settings → Webhooks → latest delivery → **Ping** or send a ping from the GitHub API. The latest delivery should show status `OK` and response code `200`.
 
+To verify the blocking check, open or synchronize a real PR. Its checks list should show `jenkins/android-apk` as pending, then successful or failed. Merge remains blocked until it is successful.
+
 ## GitHub webhook
 
 Webhook ID on `FlyHighXX/kerodi`:
@@ -180,12 +182,37 @@ When a PR event matches, Jenkins receives:
 
 ```text
 BRANCH=<pull_request.head.ref>
+HEAD_SHA=<pull_request.head.sha>
 PR_NUMBER=<pull request number>
 repo=FlyHighXX/kerodi
 action=<pull_request action>
 ```
 
 The Jenkins job checks out `refs/pull/<PR_NUMBER>/merge`, so fork PRs are supported while the PR is open.
+
+## Blocking merges
+
+Merging into `main` requires this status check:
+
+```text
+jenkins/android-apk
+```
+
+The job posts a `pending` status as soon as the webhook arrives, then replaces it with `success` or `failure` when the build finishes. Branch protection on `main` requires the check to be successful and requires the branch to be up to date. Admins are also subject to the check.
+
+If the check never appears, the PR webhook was not delivered or the `HEAD_SHA` variable was not contributed. Check the latest delivery in GitHub and the Generic Webhook Trigger variables in Jenkins.
+
+To verify branch protection after recovery:
+
+```bash
+# On the host, via Jenkins Script Console, or with GitHub CLI where available.
+curl -sS \
+  -H "Authorization: Bearer <GitHub PAT>" \
+  -H "Accept: application/vnd.github+json" \
+  https://api.github.com/repos/FlyHighXX/kerodi/branches/main/protection
+```
+
+`required_status_checks.contexts` must include `jenkins/android-apk`.
 
 ## Jenkins job config
 
@@ -202,6 +229,7 @@ Parameters:
 | `BRANCH` | `main` | Branch for manual builds |
 | `BUILD_DEBUG` | `false` | Normally leave off |
 | `PR_NUMBER` | empty | Supplied by the webhook; empty for manual builds |
+| `HEAD_SHA` | empty | PR head commit SHA supplied by the webhook; used for the blocking GitHub status |
 
 Triggers:
 
