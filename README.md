@@ -181,6 +181,6 @@ notes on-device.
 
 ## CI / builds
 
-The Android APK is built automatically on the on-device Jenkins worker when a pull request is merged into `main`. PR branches can also be built on demand from Jenkins using the `BRANCH` build parameter.
+The Android APK is built automatically on the on-device Jenkins worker when a pull request is opened, reopened, or receives new commits. Merged `main` is also built by SCM polling. PR branches can be built on demand from Jenkins using the `BRANCH` build parameter.
 
-The Freerider push worker, the Jenkins controller, and the build agent are connected over Tailscale so they can reach each other without public exposure. See [Tailscale setup](docs/tailscale-setup.md).
+The Freerider push worker, the Jenkins controller, and the build agent are connected over Tailscale. GitHub reaches Jenkins through a webhook-only Funnel proxy, so the Jenkins UI is not publicly exposed. See [Tailscale setup](docs/tailscale-setup.md) and the [always-on host runbook](docs/operations/README.md) for recovery steps.
