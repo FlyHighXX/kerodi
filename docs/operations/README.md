@@ -21,6 +21,8 @@ Tailscale: 100.77.0.70
 Funnel:    https://kerodi-android-build.tail8d2385.ts.net/
 ```
 
+The app default worker URL is `http://10.0.0.8:8787` on fresh installs. Tailscale must be connected on the device running the app; no worker token is entered there.
+
 Only this Funnel path is intentionally public:
 
 ```text
