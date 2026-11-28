@@ -67,6 +67,10 @@ if ! pgrep -f 'freerider-push-worker.mjs' >/dev/null 2>&1; then
   CONTROL_HOST=0.0.0.0 \
   CONTROL_PORT=8787 \
     nohup "$NODE_BIN" scripts/freerider-push-worker.mjs >"$RUN_DIR/worker.log" 2>&1 &
+  for _ in $(seq 1 30); do
+    http_ok http://127.0.0.1:8787/health && break
+    sleep 1
+  done
 fi
 
 if [ -f "$TOKEN_FILE" ] && ! pgrep -f 'jenkins-webhook-proxy.mjs' >/dev/null 2>&1; then
