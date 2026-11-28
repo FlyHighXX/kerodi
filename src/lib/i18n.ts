@@ -88,6 +88,8 @@ const sv: Record<string, string> = {
   'Updated {{time}}': 'Uppdaterad {{time}}',
   'Next update in {{seconds}}s': 'Nästa uppdatering om {{seconds}} s',
   'Ready for a new update': 'Redo för en ny uppdatering',
+  'Refresh allowed': 'Uppdatering tillåten',
+  'Pull down to check for new routes.': 'Dra ned för att söka efter nya rutter.',
   'Not loaded yet': 'Inte laddad ännu',
   History: 'Historik',
   'View full history': 'Visa full historik',

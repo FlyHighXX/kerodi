@@ -42,6 +42,7 @@ export function useFreeriderRoutes() {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   const [cooldownNow, setCooldownNow] = useState(() => Date.now());
+  const [refreshReadyBanner, setRefreshReadyBanner] = useState(false);
   const [newIds, setNewIds] = useState<number[]>([]);
   const [history, setHistory] = useState<RouteHistoryRecord[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -112,10 +113,17 @@ export function useFreeriderRoutes() {
       if (now >= (cooldownUntilRef.current ?? 0)) {
         cooldownUntilRef.current = null;
         setCooldownUntil(null);
+        setRefreshReadyBanner(true);
       }
     }, 1000);
     return () => clearInterval(timer);
   }, [cooldownUntil]);
+
+  useEffect(() => {
+    if (!refreshReadyBanner) return;
+    const timer = setTimeout(() => setRefreshReadyBanner(false), 6000);
+    return () => clearTimeout(timer);
+  }, [refreshReadyBanner]);
 
   const refresh = useCallback(async (options?: { force?: boolean }) => {
     if (inFlightRef.current) return;
@@ -125,6 +133,7 @@ export function useFreeriderRoutes() {
     lastAttemptRef.current = Date.now();
     setRefreshing(true);
     setError(null);
+    if (options?.force) setRefreshReadyBanner(false);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -175,10 +184,16 @@ export function useFreeriderRoutes() {
         lastUpdatedRef.current = fetchedAt;
         setLastUpdated(fetchedAt);
       }
+      const hadCooldown = cooldownUntilRef.current !== null;
       const nextCooldown = nextAllowedAt && nextAllowedAt > Date.now() ? nextAllowedAt : null;
       cooldownUntilRef.current = nextCooldown;
       setCooldownNow(Date.now());
       setCooldownUntil(nextCooldown);
+      if (nextCooldown) {
+        setRefreshReadyBanner(false);
+      } else if (hadCooldown && !options?.force) {
+        setRefreshReadyBanner(true);
+      }
       void writeSeenRouteIds(seenRef.current);
     } catch (cause) {
       setError(
@@ -224,6 +239,7 @@ export function useFreeriderRoutes() {
     error,
     lastUpdated,
     cooldownSeconds,
+    refreshReadyBanner,
     newIds,
     history,
     hydrated,

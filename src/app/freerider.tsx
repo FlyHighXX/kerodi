@@ -68,6 +68,7 @@ export default function FreeriderScreen() {
     error,
     lastUpdated,
     cooldownSeconds,
+    refreshReadyBanner,
     newIds,
     history,
     refresh,
@@ -160,6 +161,15 @@ export default function FreeriderScreen() {
 
   const listHeader = (
     <View style={styles.listHeader}>
+      {refreshReadyBanner ? (
+        <ThemedView type="backgroundElement" style={styles.readyBanner}>
+          <ThemedText type="smallBold">{t('Refresh allowed')}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {t('Pull down to check for new routes.')}
+          </ThemedText>
+        </ThemedView>
+      ) : null}
+
       <FreeriderWatchControl from={fromQuery} to={toQuery} />
 
       <ThemedView type="backgroundElement" style={styles.statusCard}>
@@ -407,6 +417,11 @@ const styles = StyleSheet.create({
   listHeader: {
     gap: Spacing.two,
     paddingBottom: Spacing.one,
+  },
+  readyBanner: {
+    gap: Spacing.half,
+    padding: Spacing.two,
+    borderRadius: Spacing.three,
   },
   statusCard: {
     gap: Spacing.one,
