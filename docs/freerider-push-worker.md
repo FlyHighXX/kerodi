@@ -56,7 +56,7 @@ A route that disappears and later returns sends **Freerider route available agai
 
 The app starts with `http://100.77.0.70:8787` pre-filled in **Settings → Worker connection**, and any override is saved on the device. Tailscale must be connected on the device running the app; no worker token is needed. A build-time `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT` can replace that default for custom builds.
 
-The Freerider tab reads cached `/routes`; tab focus and filter toggles only re-filter the local list. Pull-to-refresh uses the throttled `/poll-now` endpoint, so the device never makes its own hertzfreerider request. The visible **Updated** time comes from the worker's `fetchedAt` (the last real Hertz fetch), so cache reads and throttled checks do not move it. The locations list is cached on device for seven days.
+The Freerider tab reads cached `/routes`; tab focus and filter toggles only re-filter the local list. Pull-to-refresh uses the throttled `/poll-now` endpoint, so the device never makes its own hertzfreerider request. The visible **Updated** time comes from the worker's `fetchedAt` (the last real Hertz fetch), so cache reads and throttled checks do not move it. Route lists and location suggestions use Swedish alphabet ordering, with Å, Ä, and Ö after Z. The locations list is cached on device for seven days.
 
 Use a Tailscale address when the app is not on the same LAN as the worker. In this setup, the worker and Jenkins share one host:
 

@@ -24,6 +24,10 @@ export const NEW_ROUTES_KEY = 'kerodi.freerider.new-routes.v1';
 export const WORKER_URL_KEY = 'kerodi.freerider.worker-url.v1';
 export const VIEW_SETTINGS_KEY = 'kerodi.freerider.view-settings.v1';
 
+// Swedish collation places Å, Ä, and Ö after Z. Keep it separate from foldText,
+// which is intentionally accent-insensitive for filtering and matching.
+const swedishCollator = new Intl.Collator('sv-SE', { sensitivity: 'accent', usage: 'sort' });
+
 export type FreerideLocation = {
   name: string;
   tracCode: string;
@@ -160,16 +164,14 @@ export async function fetchFreeriderLocations(signal?: AbortSignal): Promise<Fre
     if (!byName.has(item.name)) byName.set(item.name, item);
   }
 
-  return [...byName.values()].sort((a, b) =>
-    a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
-  );
+  return [...byName.values()].sort((a, b) => swedishCollator.compare(a.name, b.name));
 }
 
-/** Alphabetical by pickup location, then return location. */
+/** Swedish-alphabetical by pickup location, then return location. */
 export function compareRoutesByLocation(a: RouteOffer, b: RouteOffer) {
   return (
-    foldText(a.pickupName).localeCompare(foldText(b.pickupName)) ||
-    foldText(a.returnName).localeCompare(foldText(b.returnName))
+    swedishCollator.compare(a.pickupName, b.pickupName) ||
+    swedishCollator.compare(a.returnName, b.returnName)
   );
 }
 
