@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { WORKER_URL_KEY } from '@/lib/freerider';
 
-const DEFAULT_WORKER_URL = 'http://10.0.0.8:8787';
+const DEFAULT_WORKER_URL = 'http://100.77.0.70:8787';
 const configuredEndpoint = process.env.EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT?.trim();
 
 export function normalizeWorkerUrl(value: string) {
@@ -20,7 +20,7 @@ export function isValidWorkerUrl(value: string) {
   }
 }
 
-/** LAN worker by default; Tailscale must be connected. A build-time endpoint can override it. */
+/** Tailnet worker by default; Tailscale must be connected. A build-time endpoint can override it. */
 export function defaultWorkerUrl() {
   return normalizeWorkerUrl(configuredEndpoint || DEFAULT_WORKER_URL);
 }

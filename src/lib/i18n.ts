@@ -86,11 +86,13 @@ const sv: Record<string, string> = {
   'To {{query}}': 'Till {{query}}',
   'NO excluded': 'NO uteslutet',
   'Updated {{time}}': 'Uppdaterad {{time}}',
+  'Next update in {{seconds}}s': 'Nästa uppdatering om {{seconds}} s',
+  'Ready for a new update': 'Redo för en ny uppdatering',
+  'Refresh allowed': 'Uppdatering tillåten',
+  'Pull down to check for new routes.': 'Dra ned för att söka efter nya rutter.',
   'Not loaded yet': 'Inte laddad ännu',
   History: 'Historik',
   'View full history': 'Visa full historik',
-  'Checking…': 'Kontrollerar…',
-  'Check now': 'Kontrollera nu',
   '{{count}} new · Mark seen': '{{count}} nya · Markera som sedda',
   'Hidden: {{unavailable}} unavailable · {{expired}} expired':
     'Dolda: {{unavailable}} inte tillgängliga · {{expired}} utgångna',
@@ -128,8 +130,8 @@ const sv: Record<string, string> = {
   '{{days}}d {{hours}}h': '{{days}}d {{hours}}h',
   '{{count}}d': '{{count}}d',
 
-  'Enter a full URL, for example http://10.0.0.8:8787':
-    'Ange en fullständig URL, till exempel http://10.0.0.8:8787',
+  'Enter a full URL, for example http://100.77.0.70:8787':
+    'Ange en fullständig URL, till exempel http://100.77.0.70:8787',
   'Could not save the worker URL.': 'Kunde inte spara worker-URL:en.',
   'Could not reset the worker URL.': 'Kunde inte återställa worker-URL:en.',
   'Save the URL before testing it.': 'Spara URL:en innan du testar den.',
@@ -157,8 +159,8 @@ const sv: Record<string, string> = {
   'Show expired routes': 'Visa utgångna rutter',
   'Exclude Norway (NO)': 'Uteslut Norge (NO)',
   'Worker connection': 'Worker-anslutning',
-  'Address of the machine running the Freerider worker. Fresh installs are pre-filled with http://10.0.0.8:8787 and saved per device. Tailscale must be connected; no worker token is needed. Notifications are set up automatically the first time you start a listener on the Freerider tab.':
-    'Adressen till datorn som kör Freerider-workern. Nya installationer är förifyllda med http://10.0.0.8:8787 och sparas per enhet. Tailscale måste vara anslutet; ingen worker-token behövs. Aviseringar aktiveras automatiskt första gången du startar en bevakning på fliken Freerider.',
+  'Address of the machine running the Freerider worker. Fresh installs are pre-filled with http://100.77.0.70:8787 and saved per device. Tailscale must be connected; no worker token is needed. Notifications are set up automatically the first time you start a listener on the Freerider tab.':
+    'Adressen till datorn som kör Freerider-workern. Nya installationer är förifyllda med http://100.77.0.70:8787 och sparas per enhet. Tailscale måste vara anslutet; ingen worker-token behövs. Aviseringar aktiveras automatiskt första gången du startar en bevakning på fliken Freerider.',
   'Saved: {{url}}': 'Sparad: {{url}}',
   'No worker URL saved yet.': 'Ingen worker-URL sparad ännu.',
   Test: 'Testa',

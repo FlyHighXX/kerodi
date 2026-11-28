@@ -1,12 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
+  LOCATIONS_CACHE_KEY,
   LOCATION_FILTERS_KEY,
   NEW_ROUTES_KEY,
   NOTIFIED_ROUTES_KEY,
   POLL_SECONDS_KEY,
   SEEN_ROUTES_KEY,
   VIEW_SETTINGS_KEY,
+  type FreerideLocation,
 } from '@/lib/freerider';
 
 export type LocationFilters = {
@@ -33,6 +35,40 @@ async function readJson(key: string): Promise<unknown> {
   } catch {
     return null;
   }
+}
+
+export const LOCATIONS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type CachedLocations = {
+  locations: FreerideLocation[];
+  fetchedAt: number;
+};
+
+export async function readCachedLocations(): Promise<CachedLocations | null> {
+  const parsed = await readJson(LOCATIONS_CACHE_KEY);
+  if (!parsed || typeof parsed !== 'object') return null;
+  const value = parsed as { locations?: unknown; fetchedAt?: unknown };
+  if (!Array.isArray(value.locations)) return null;
+  const fetchedAt = Number(value.fetchedAt);
+  return {
+    locations: value.locations.filter(
+      (item): item is FreerideLocation =>
+        !!item &&
+        typeof item === 'object' &&
+        typeof item.name === 'string' &&
+        typeof item.tracCode === 'string',
+    ),
+    fetchedAt: Number.isFinite(fetchedAt) ? fetchedAt : 0,
+  };
+}
+
+export async function writeCachedLocations(locations: FreerideLocation[], fetchedAt = Date.now()) {
+  try {
+    await AsyncStorage.setItem(
+      LOCATIONS_CACHE_KEY,
+      JSON.stringify({ locations, fetchedAt } satisfies CachedLocations),
+    );
+  } catch {}
 }
 
 export async function readNumberSet(key: string): Promise<Set<number>> {

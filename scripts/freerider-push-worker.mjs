@@ -4,6 +4,8 @@
  *
  * The worker exposes a small HTTP control API so the app can start/stop
  * From/To listeners with an expiry. One feed poll serves all active sessions.
+ * The app reads the worker's cached feed instead of calling hertzfreerider
+ * directly, so all public traffic originates from this one host.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -13,7 +15,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 const API_URL = 'https://hertzfreerider.se/api/transport-routes/';
 const SITE_URL = 'https://hertzfreerider.se/';
 const EXPO_PUSH_URL = process.env.EXPO_PUSH_URL ?? 'https://api.expo.dev/v2/push/send';
-const DEFAULT_POLL_SECONDS = clampSeconds(process.env.POLL_SECONDS ?? 10);
+const DEFAULT_POLL_SECONDS = clampSeconds(process.env.POLL_SECONDS ?? 60);
+const ROUTE_REFRESH_SECONDS = clampSeconds(process.env.ROUTE_REFRESH_SECONDS ?? DEFAULT_POLL_SECONDS);
+const MAX_BACKOFF_SECONDS = clampSeconds(process.env.MAX_BACKOFF_SECONDS ?? 600);
 const SESSIONS_FILE = process.env.SESSIONS_FILE ?? './.freerider-sessions.json';
 const HISTORY_FILE = process.env.HISTORY_FILE ?? './.freerider-history.json';
 const CONTROL_HOST = process.env.CONTROL_HOST ?? '0.0.0.0';
@@ -22,6 +26,12 @@ const CONTROL_PORT = Number(process.env.CONTROL_PORT ?? 8787);
 let sessionsCache;
 let historyCache;
 let firstPollWithSessions = true;
+
+let latestRoutes = [];
+let lastFetchAt = 0;
+let lastProcessedFetchAt = 0;
+let nextFetchAt = 0;
+let consecutiveFailures = 0;
 
 function clampSeconds(value) {
   const number = Number(value);
@@ -70,7 +80,9 @@ function normalizeRoutes(groups) {
       });
     }
   }
-  return routes;
+  return routes.sort((a, b) =>
+    String(a.availableAt ?? '').localeCompare(String(b.availableAt ?? '')),
+  );
 }
 
 function buildRouteUrl() {
@@ -85,10 +97,71 @@ async function fetchRoutes() {
       headers: { Accept: 'application/json' },
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`Feed returned ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(`Feed returned ${response.status}`);
+      error.status = response.status;
+      const retryAfter = Number(response.headers.get('retry-after'));
+      if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfter = retryAfter;
+      throw error;
+    }
     return normalizeRoutes(await response.json());
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+function jitterSeconds(seconds) {
+  if (seconds <= 2) return seconds;
+  return Math.max(2, seconds * (0.9 + Math.random() * 0.2));
+}
+
+function handleFeedFailure(error) {
+  consecutiveFailures += 1;
+  const retryAfter = Number(error?.retryAfter);
+  const exponential = Math.min(
+    MAX_BACKOFF_SECONDS,
+    30 * 2 ** Math.min(consecutiveFailures - 1, 5),
+  );
+  const delay = Math.max(
+    ROUTE_REFRESH_SECONDS,
+    Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : exponential,
+  );
+  nextFetchAt = Date.now() + delay * 1000;
+  console.error(
+    `Feed poll failed: ${error instanceof Error ? error.message : error}; backing off ${delay}s`,
+  );
+  return delay;
+}
+
+/** Earliest epoch ms when another real feed fetch is allowed. */
+function feedNextAllowedAt() {
+  const throttleUntil = lastFetchAt ? lastFetchAt + ROUTE_REFRESH_SECONDS * 1000 : 0;
+  return Math.max(nextFetchAt, throttleUntil);
+}
+
+/**
+ * Fetch at most once per ROUTE_REFRESH_SECONDS. Scheduled polls, Start
+ * baselines, and manual checks share this throttle, so hertz sees one steady
+ * client. Normal app reads use the cached feed without calling this.
+ */
+async function ensureFreshRoutes() {
+  if (Date.now() < nextFetchAt) {
+    return { routes: latestRoutes, fetchedAt: lastFetchAt, refreshed: false };
+  }
+  if (lastFetchAt && Date.now() - lastFetchAt < ROUTE_REFRESH_SECONDS * 1000) {
+    return { routes: latestRoutes, fetchedAt: lastFetchAt, refreshed: false };
+  }
+
+  try {
+    const routes = await fetchRoutes();
+    latestRoutes = routes;
+    lastFetchAt = Date.now();
+    consecutiveFailures = 0;
+    nextFetchAt = 0;
+    return { routes, fetchedAt: lastFetchAt, refreshed: true };
+  } catch (error) {
+    handleFeedFailure(error);
+    return { routes: latestRoutes, fetchedAt: lastFetchAt, refreshed: false };
   }
 }
 
@@ -305,7 +378,9 @@ async function startSession(input) {
   const pollSeconds = clampSeconds(input.pollSeconds ?? DEFAULT_POLL_SECONDS);
 
   // Baseline at start so existing routes never produce an immediate alert.
-  const currentIds = (await fetchRoutes()).map((route) => route.id);
+  // Reuse the worker cache or throttle a fresh fetch through ensureFreshRoutes.
+  const baseline = await ensureFreshRoutes();
+  const currentIds = baseline.routes.map((route) => route.id);
   const now = Date.now();
   const sessions = pruneSessions(await readSessions());
   const expiresAt = now + durationMinutes * 60 * 1000;
@@ -432,8 +507,18 @@ async function pollOnce() {
   await writeSessions(sessions);
   if (sessions.length === 0) return 2;
 
+  const feed = await ensureFreshRoutes();
+  const baseDelay = Math.min(...sessions.map((session) => clampSeconds(session.pollSeconds)));
+  const remainingCooldown = Math.max(
+    0,
+    Math.ceil((feedNextAllowedAt() - Date.now()) / 1000),
+  );
+  if (feed.fetchedAt === 0 || feed.fetchedAt === lastProcessedFetchAt) {
+    return remainingCooldown > 0 ? Math.max(2, remainingCooldown) : jitterSeconds(baseDelay);
+  }
+
   const now = Date.now();
-  const routes = await fetchRoutes();
+  const routes = feed.routes;
   const { history, reappearedIds } = await reconcileHistory(routes, now);
   // A restart can find routes already back in the feed; log the change but don't alert for it.
   const notifyReappeared = firstPollWithSessions ? new Set() : reappearedIds;
@@ -495,8 +580,9 @@ async function pollOnce() {
   await writeSessions(sessions);
   await sendGroups(newGroups, 'new');
   await sendGroups(againGroups, 'available-again');
+  lastProcessedFetchAt = feed.fetchedAt;
 
-  return Math.min(...sessions.map((session) => clampSeconds(session.pollSeconds)));
+  return remainingBackoff > 0 ? Math.max(2, remainingBackoff) : jitterSeconds(baseDelay);
 }
 
 async function readBody(request) {
@@ -540,6 +626,41 @@ const server = createServer(async (request, response) => {
         (record) => (record.updatedAt ?? 0) >= since,
       );
       sendJson(response, 200, { history });
+      return;
+    }
+
+    // The app reads this cached feed instead of calling hertzfreerider itself.
+    // Normal tab/filter changes must never trigger a fetch. Only bootstrap once
+    // if the worker has never fetched; manual checks use /poll-now.
+    if (request.method === 'GET' && url.pathname === '/routes') {
+      const feed =
+        lastFetchAt === 0
+          ? await ensureFreshRoutes()
+          : { routes: latestRoutes, fetchedAt: lastFetchAt, refreshed: false };
+      sendJson(response, 200, {
+        routes: feed.routes,
+        fetchedAt: feed.fetchedAt,
+        refreshed: feed.refreshed,
+        nextAllowedAt: feedNextAllowedAt() || 0,
+        backedOffUntil: nextFetchAt || 0,
+      });
+      return;
+    }
+
+    // Manual pull-to-refresh from the app. Shares the same fetch throttle and
+    // forces alert processing when a new fetch actually happened.
+    if (request.method === 'POST' && url.pathname === '/poll-now') {
+      const feed = await ensureFreshRoutes();
+      if (feed.refreshed) lastProcessedFetchAt = 0;
+      await pollOnce();
+      sendJson(response, 200, {
+        ok: true,
+        routes: feed.routes,
+        fetchedAt: feed.fetchedAt,
+        refreshed: feed.refreshed,
+        nextAllowedAt: feedNextAllowedAt() || 0,
+        backedOffUntil: nextFetchAt || 0,
+      });
       return;
     }
 
@@ -591,14 +712,15 @@ process.on('SIGTERM', shutdown);
 server.listen(CONTROL_PORT, CONTROL_HOST, () => {
   console.log(
     `Freerider session worker listening on http://${CONTROL_HOST}:${CONTROL_PORT} ` +
-      `(poll default=${DEFAULT_POLL_SECONDS}s, sessions=${SESSIONS_FILE}, history=${HISTORY_FILE})`,
+      `(poll default=${DEFAULT_POLL_SECONDS}s, refresh throttle=${ROUTE_REFRESH_SECONDS}s, ` +
+      `max backoff=${MAX_BACKOFF_SECONDS}s, sessions=${SESSIONS_FILE}, history=${HISTORY_FILE})`,
   );
 });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 while (running) {
-  let delay = 5;
+  let delay = DEFAULT_POLL_SECONDS;
   try {
     delay = await pollOnce();
   } catch (error) {

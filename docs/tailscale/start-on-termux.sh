@@ -11,6 +11,15 @@ TOKEN_FILE="${RUN_DIR}/jenkins-webhook-token"
 JENKINS_WAR="/opt/jenkins/jenkins.war"
 JVM_OPTIONS="/etc/jenkins/jvm.options"
 
+NODE_BIN="${NODE_BIN:-}"
+[ -n "$NODE_BIN" ] || NODE_BIN="$(command -v node 2>/dev/null || true)"
+[ -n "$NODE_BIN" ] || [ ! -x /data/data/com.termux/files/usr/bin/node ] ||
+  NODE_BIN=/data/data/com.termux/files/usr/bin/node
+if [ -z "$NODE_BIN" ]; then
+  echo "!! node not found; set NODE_BIN and retry"
+  exit 1
+fi
+
 mkdir -p "$RUN_DIR" /var/run/tailscale /var/lib/tailscale
 
 http_ok() {
@@ -54,10 +63,14 @@ if ! pgrep -f 'freerider-push-worker.mjs' >/dev/null 2>&1; then
   cd "$REPO_DIR"
   SESSIONS_FILE="$RUN_DIR/freerider-sessions.json" \
   HISTORY_FILE="$RUN_DIR/freerider-history.json" \
-  POLL_SECONDS=10 \
+  POLL_SECONDS=60 \
   CONTROL_HOST=0.0.0.0 \
   CONTROL_PORT=8787 \
-    nohup node scripts/freerider-push-worker.mjs >"$RUN_DIR/worker.log" 2>&1 &
+    nohup "$NODE_BIN" scripts/freerider-push-worker.mjs >"$RUN_DIR/worker.log" 2>&1 &
+  for _ in $(seq 1 30); do
+    http_ok http://127.0.0.1:8787/health && break
+    sleep 1
+  done
 fi
 
 if [ -f "$TOKEN_FILE" ] && ! pgrep -f 'jenkins-webhook-proxy.mjs' >/dev/null 2>&1; then
@@ -65,7 +78,7 @@ if [ -f "$TOKEN_FILE" ] && ! pgrep -f 'jenkins-webhook-proxy.mjs' >/dev/null 2>&
   cd "$REPO_DIR"
   KERODI_WEBHOOK_TOKEN_FILE="$TOKEN_FILE" \
   KERODI_WEBHOOK_PROXY_PORT=8788 \
-    setsid nohup node scripts/jenkins-webhook-proxy.mjs \
+    setsid nohup "$NODE_BIN" scripts/jenkins-webhook-proxy.mjs \
       >"$RUN_DIR/jenkins-webhook-proxy.log" 2>&1 < /dev/null &
 elif [ ! -f "$TOKEN_FILE" ]; then
   echo "!! Missing $TOKEN_FILE; webhook proxy was not started."

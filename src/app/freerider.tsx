@@ -67,6 +67,8 @@ export default function FreeriderScreen() {
     refreshing,
     error,
     lastUpdated,
+    cooldownSeconds,
+    refreshReadyBanner,
     newIds,
     history,
     refresh,
@@ -159,26 +161,34 @@ export default function FreeriderScreen() {
 
   const listHeader = (
     <View style={styles.listHeader}>
+      {refreshReadyBanner ? (
+        <ThemedView type="backgroundElement" style={styles.readyBanner}>
+          <ThemedText type="smallBold">{t('Refresh allowed')}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {t('Pull down to check for new routes.')}
+          </ThemedText>
+        </ThemedView>
+      ) : null}
+
       <FreeriderWatchControl from={fromQuery} to={toQuery} />
 
       <ThemedView type="backgroundElement" style={styles.statusCard}>
         <View style={styles.rowBetween}>
-          <ThemedText type="small" themeColor="textSecondary">
-            {lastUpdated
-              ? t('Updated {{time}}', { time: formatClock(lastUpdated) })
-              : t('Not loaded yet')}
-          </ThemedText>
+          <View style={styles.statusInfo}>
+            <ThemedText type="small" themeColor="textSecondary">
+              {lastUpdated
+                ? t('Updated {{time}}', { time: formatClock(lastUpdated) })
+                : t('Not loaded yet')}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {cooldownSeconds > 0
+                ? t('Next update in {{seconds}}s', { seconds: cooldownSeconds })
+                : t('Ready for a new update')}
+            </ThemedText>
+          </View>
           <View style={styles.statusActions}>
             <Pressable onPress={() => openHistory(null)} hitSlop={8}>
               <ThemedText type="link">{t('History')}</ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={() => void refresh({ force: true })}
-              disabled={refreshing}
-              hitSlop={8}>
-              <ThemedText type="link" themeColor={refreshing ? 'textSecondary' : undefined}>
-                {refreshing ? t('Checking…') : t('Check now')}
-              </ThemedText>
             </Pressable>
             {newIds.length > 0 ? (
               <Pressable onPress={markAllSeen} hitSlop={8}>
@@ -408,6 +418,11 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     paddingBottom: Spacing.one,
   },
+  readyBanner: {
+    gap: Spacing.half,
+    padding: Spacing.two,
+    borderRadius: Spacing.three,
+  },
   statusCard: {
     gap: Spacing.one,
     padding: Spacing.two,
@@ -418,6 +433,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.two,
+  },
+  statusInfo: {
+    flex: 1,
+    gap: Spacing.half,
   },
   statusActions: {
     flexDirection: 'row',

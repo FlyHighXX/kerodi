@@ -8,7 +8,7 @@ This is the recovery README for the machine that keeps Kerodi running. Use it af
 | --- | --- | --- | --- |
 | Tailscale daemon | `tailscaled`, userspace networking | Private tailnet connectivity | No |
 | Jenkins controller | `127.0.0.1:8080` | Android APK builds, PR webhook trigger | No — only via webhook proxy |
-| Freerider push worker | `0.0.0.0:8787` | Session/history API for the app | Tailnet only |
+| Freerider push worker | `0.0.0.0:8787` | Session/history/cached-feed API for the app | Tailnet only |
 | Webhook-only proxy | `127.0.0.1:8788` | Allows only the Jenkins webhook path with the correct token | No — behind Funnel |
 | Tailscale Funnel | `https://kerodi-android-build.tail8d2385.ts.net/` | Public HTTPS entry to the webhook proxy | Yes, webhook path only |
 
@@ -21,7 +21,9 @@ Tailscale: 100.77.0.70
 Funnel:    https://kerodi-android-build.tail8d2385.ts.net/
 ```
 
-The app default worker URL is `http://10.0.0.8:8787` on fresh installs. Tailscale must be connected on the device running the app; no worker token is entered there.
+The app default worker URL is `http://100.77.0.70:8787` on fresh installs. Tailscale must be connected on the device running the app; no worker token is entered there.
+
+The worker uses a shared 60-second throttle for every hertzfreerider fetch: scheduled polls, Start baselines, and pull-to-refresh. Tab opens and filter changes read the cached feed through `/routes` without fetching hertzfreerider; only `/poll-now` triggers a throttled refresh. Feed errors back off exponentially, and `/routes` plus `/poll-now` report `nextAllowedAt` so the app can show the remaining cooldown.
 
 Only this Funnel path is intentionally public:
 
@@ -188,7 +190,7 @@ Freerider worker:
 cd /root/repos/kerodi
 SESSIONS_FILE=/root/.kerodi/freerider-sessions.json \
 HISTORY_FILE=/root/.kerodi/freerider-history.json \
-POLL_SECONDS=10 \
+POLL_SECONDS=60 \
 CONTROL_HOST=0.0.0.0 \
 CONTROL_PORT=8787 \
   nohup node scripts/freerider-push-worker.mjs \
