@@ -23,7 +23,7 @@ Funnel:    https://kerodi-android-build.tail8d2385.ts.net/
 
 The app default worker URL is `http://100.77.0.70:8787` on fresh installs. Tailscale must be connected on the device running the app; no worker token is entered there.
 
-The worker uses a shared 60-second throttle for every hertzfreerider fetch: scheduled polls, Start baselines, and pull-to-refresh. Tab opens and filter changes read the cached feed through `/routes` without fetching hertzfreerider; only `/poll-now` triggers a throttled refresh. Feed errors back off exponentially.
+The worker uses a shared 60-second throttle for every hertzfreerider fetch: scheduled polls, Start baselines, and pull-to-refresh. Tab opens and filter changes read the cached feed through `/routes` without fetching hertzfreerider; only `/poll-now` triggers a throttled refresh. Feed errors back off exponentially, and `/routes` plus `/poll-now` report `nextAllowedAt` so the app can show the remaining cooldown.
 
 Only this Funnel path is intentionally public:
 

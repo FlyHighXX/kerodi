@@ -29,6 +29,8 @@ The worker listens on `0.0.0.0:8787` and exposes:
 
 All fetches — scheduled polls, Start baselines, and pull-to-refresh — share one throttle of `ROUTE_REFRESH_SECONDS` (default 60s). Normal app reads use `/routes` and do not fetch hertzfreerider. Scheduled polls add ±10% jitter. Feed errors back off exponentially up to `MAX_BACKOFF_SECONDS` (default 600s), and `Retry-After` is honoured. With one active listener this is about 1,440 hertz requests/day instead of 8,640.
 
+Both `/routes` and `/poll-now` return `nextAllowedAt`: the earliest epoch ms when another real Hertz fetch is allowed. It is the later of the normal throttle and any failure backoff. The app shows **Next update in {{seconds}}s** while this cooldown is active, and **Ready for a new update** once it has passed. Pulling to refresh during the cooldown returns the cached feed without making a Hertz request.
+
 Multiple listeners can run for the same token. One feed poll serves all active listeners, and matches are grouped into one push per user to avoid duplicates. `excludeCountry` (for example `"NO"`) suppresses alerts for routes whose pickup or return country matches, and is also returned in `/status` so the app can keep active listeners in sync with the setting.
 
 While listeners are active, each poll also records detected route IDs in `HISTORY_FILE`. Routes that leave the feed are marked `unavailable` (or `expired` once their `expireTime` has passed). The worker is the single source of truth: the app fetches history through `/history` on each refresh, keeps it only in memory for the current session, and deletes the old device-owned history copy on first launch. This powers the route list and the **History** sheet without making history device-specific.

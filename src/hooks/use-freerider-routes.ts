@@ -40,6 +40,8 @@ export function useFreeriderRoutes() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+  const [cooldownNow, setCooldownNow] = useState(() => Date.now());
   const [newIds, setNewIds] = useState<number[]>([]);
   const [history, setHistory] = useState<RouteHistoryRecord[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -49,6 +51,7 @@ export function useFreeriderRoutes() {
   const historyRef = useRef<RouteHistoryRecord[]>([]);
   const historyUpdatedAtRef = useRef(0);
   const lastUpdatedRef = useRef<number | null>(null);
+  const cooldownUntilRef = useRef<number | null>(null);
   const baselineRef = useRef(false);
   const lastAttemptRef = useRef(0);
   const inFlightRef = useRef(false);
@@ -101,6 +104,19 @@ export function useFreeriderRoutes() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!cooldownUntil) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setCooldownNow(now);
+      if (now >= (cooldownUntilRef.current ?? 0)) {
+        cooldownUntilRef.current = null;
+        setCooldownUntil(null);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownUntil]);
+
   const refresh = useCallback(async (options?: { force?: boolean }) => {
     if (inFlightRef.current) return;
     if (!options?.force && Date.now() - lastAttemptRef.current < STALE_AFTER_MS) return;
@@ -119,7 +135,7 @@ export function useFreeriderRoutes() {
         fetchWorkerRouteHistory(historyUpdatedAtRef.current, controller.signal),
       ]);
       if (routesResult.status === 'rejected') throw routesResult.reason;
-      const { routes: next, fetchedAt } = routesResult.value;
+      const { routes: next, fetchedAt, nextAllowedAt } = routesResult.value;
       const previous = seenRef.current;
       // The first feed load is a baseline; routes present then are not "new".
       const appeared =
@@ -159,6 +175,10 @@ export function useFreeriderRoutes() {
         lastUpdatedRef.current = fetchedAt;
         setLastUpdated(fetchedAt);
       }
+      const nextCooldown = nextAllowedAt && nextAllowedAt > Date.now() ? nextAllowedAt : null;
+      cooldownUntilRef.current = nextCooldown;
+      setCooldownNow(Date.now());
+      setCooldownUntil(nextCooldown);
       void writeSeenRouteIds(seenRef.current);
     } catch (cause) {
       setError(
@@ -192,6 +212,10 @@ export function useFreeriderRoutes() {
     }, [hydrated, refresh]),
   );
 
+  const cooldownSeconds = cooldownUntil
+    ? Math.max(0, Math.ceil((cooldownUntil - cooldownNow) / 1000))
+    : 0;
+
   return {
     routes,
     locations,
@@ -199,6 +223,7 @@ export function useFreeriderRoutes() {
     refreshing,
     error,
     lastUpdated,
+    cooldownSeconds,
     newIds,
     history,
     hydrated,

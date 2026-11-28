@@ -67,6 +67,7 @@ export default function FreeriderScreen() {
     refreshing,
     error,
     lastUpdated,
+    cooldownSeconds,
     newIds,
     history,
     refresh,
@@ -163,11 +164,18 @@ export default function FreeriderScreen() {
 
       <ThemedView type="backgroundElement" style={styles.statusCard}>
         <View style={styles.rowBetween}>
-          <ThemedText type="small" themeColor="textSecondary">
-            {lastUpdated
-              ? t('Updated {{time}}', { time: formatClock(lastUpdated) })
-              : t('Not loaded yet')}
-          </ThemedText>
+          <View style={styles.statusInfo}>
+            <ThemedText type="small" themeColor="textSecondary">
+              {lastUpdated
+                ? t('Updated {{time}}', { time: formatClock(lastUpdated) })
+                : t('Not loaded yet')}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {cooldownSeconds > 0
+                ? t('Next update in {{seconds}}s', { seconds: cooldownSeconds })
+                : t('Ready for a new update')}
+            </ThemedText>
+          </View>
           <View style={styles.statusActions}>
             <Pressable onPress={() => openHistory(null)} hitSlop={8}>
               <ThemedText type="link">{t('History')}</ThemedText>
@@ -410,6 +418,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.two,
+  },
+  statusInfo: {
+    flex: 1,
+    gap: Spacing.half,
   },
   statusActions: {
     flexDirection: 'row',

@@ -133,6 +133,12 @@ function handleFeedFailure(error) {
   return delay;
 }
 
+/** Earliest epoch ms when another real feed fetch is allowed. */
+function feedNextAllowedAt() {
+  const throttleUntil = lastFetchAt ? lastFetchAt + ROUTE_REFRESH_SECONDS * 1000 : 0;
+  return Math.max(nextFetchAt, throttleUntil);
+}
+
 /**
  * Fetch at most once per ROUTE_REFRESH_SECONDS. Scheduled polls, Start
  * baselines, and manual checks share this throttle, so hertz sees one steady
@@ -503,13 +509,12 @@ async function pollOnce() {
 
   const feed = await ensureFreshRoutes();
   const baseDelay = Math.min(...sessions.map((session) => clampSeconds(session.pollSeconds)));
-  const remainingBackoff = nextFetchAt > Date.now() ? Math.ceil((nextFetchAt - Date.now()) / 1000) : 0;
-  const remainingThrottle = lastFetchAt
-    ? Math.ceil((lastFetchAt + ROUTE_REFRESH_SECONDS * 1000 - Date.now()) / 1000)
-    : 0;
+  const remainingCooldown = Math.max(
+    0,
+    Math.ceil((feedNextAllowedAt() - Date.now()) / 1000),
+  );
   if (feed.fetchedAt === 0 || feed.fetchedAt === lastProcessedFetchAt) {
-    const wait = Math.max(remainingBackoff, remainingThrottle);
-    return wait > 0 ? Math.max(2, wait) : jitterSeconds(baseDelay);
+    return remainingCooldown > 0 ? Math.max(2, remainingCooldown) : jitterSeconds(baseDelay);
   }
 
   const now = Date.now();
@@ -636,6 +641,7 @@ const server = createServer(async (request, response) => {
         routes: feed.routes,
         fetchedAt: feed.fetchedAt,
         refreshed: feed.refreshed,
+        nextAllowedAt: feedNextAllowedAt() || 0,
         backedOffUntil: nextFetchAt || 0,
       });
       return;
@@ -652,6 +658,7 @@ const server = createServer(async (request, response) => {
         routes: feed.routes,
         fetchedAt: feed.fetchedAt,
         refreshed: feed.refreshed,
+        nextAllowedAt: feedNextAllowedAt() || 0,
         backedOffUntil: nextFetchAt || 0,
       });
       return;
