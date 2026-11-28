@@ -87,6 +87,12 @@ type WorkerRoutesPayload = {
   backedOffUntil?: unknown;
 };
 
+export type WorkerRoutesResult = {
+  routes: RouteOffer[];
+  /** Timestamp of the last real hertzfreerider fetch, not of this app read. */
+  fetchedAt: number | null;
+};
+
 function isRouteOffer(value: unknown): value is RouteOffer {
   if (!value || typeof value !== 'object') return false;
   const route = value as Partial<RouteOffer>;
@@ -101,17 +107,23 @@ function isRouteOffer(value: unknown): value is RouteOffer {
 /**
  * Read the worker's cached feed. Manual checks hit the worker's throttled
  * /poll-now endpoint; no hertzfreerider request is made from the device.
+ * The returned fetchedAt is the worker's last real hertz fetch time, so
+ * cache reads never make the UI timestamp look newer.
  */
 export async function fetchWorkerRoutes(options?: {
   force?: boolean;
   signal?: AbortSignal;
-}): Promise<RouteOffer[]> {
+}): Promise<WorkerRoutesResult> {
   const payload = options?.force
     ? await post<WorkerRoutesPayload>('/poll-now', {}, options?.signal)
     : await get<WorkerRoutesPayload>('/routes', options?.signal);
 
   const routes = Array.isArray(payload.routes) ? payload.routes.filter(isRouteOffer) : [];
-  return routes.sort((a, b) => a.availableAt.localeCompare(b.availableAt));
+  const fetchedAt = Number(payload.fetchedAt);
+  return {
+    routes: routes.sort((a, b) => a.availableAt.localeCompare(b.availableAt)),
+    fetchedAt: Number.isFinite(fetchedAt) && fetchedAt > 0 ? fetchedAt : null,
+  };
 }
 
 /** Read worker-owned history deltas. No history is stored on the device. */

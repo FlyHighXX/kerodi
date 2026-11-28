@@ -26,7 +26,8 @@ const REQUEST_TIMEOUT_MS = 15 * 1000;
 /**
  * Reads the worker's cached Hertz Freerider feed when the tab is opened or
  * refreshed. The app never polls hertzfreerider directly; the worker throttles
- * refreshes and serves all listeners from one fetch.
+ * refreshes and serves all listeners from one fetch. The displayed update time
+ * comes from the worker's last real hertz fetch, not from local cache reads.
  *
  * New-route alerts are handled by the external push worker, not by this hook.
  * This hook only loads data for display and highlights routes that appeared
@@ -47,6 +48,7 @@ export function useFreeriderRoutes() {
   const newIdsRef = useRef<number[]>([]);
   const historyRef = useRef<RouteHistoryRecord[]>([]);
   const historyUpdatedAtRef = useRef(0);
+  const lastUpdatedRef = useRef<number | null>(null);
   const baselineRef = useRef(false);
   const lastAttemptRef = useRef(0);
   const inFlightRef = useRef(false);
@@ -117,8 +119,7 @@ export function useFreeriderRoutes() {
         fetchWorkerRouteHistory(historyUpdatedAtRef.current, controller.signal),
       ]);
       if (routesResult.status === 'rejected') throw routesResult.reason;
-      const next = routesResult.value;
-      const now = Date.now();
+      const { routes: next, fetchedAt } = routesResult.value;
       const previous = seenRef.current;
       // The first feed load is a baseline; routes present then are not "new".
       const appeared =
@@ -152,7 +153,12 @@ export function useFreeriderRoutes() {
         setHistory(merged);
       }
 
-      setLastUpdated(now);
+      // Only move the visible timestamp when the worker reports a newer real
+      // hertz fetch. Cache reads and throttled checks leave it untouched.
+      if (fetchedAt && (lastUpdatedRef.current === null || fetchedAt > lastUpdatedRef.current)) {
+        lastUpdatedRef.current = fetchedAt;
+        setLastUpdated(fetchedAt);
+      }
       void writeSeenRouteIds(seenRef.current);
     } catch (cause) {
       setError(
