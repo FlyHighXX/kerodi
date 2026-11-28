@@ -184,8 +184,8 @@ export function useFreeriderRoutes() {
     void writeNewRouteIds([]);
   }, [routes]);
 
-  // Fetch once when the tab becomes visible. Pull-to-refresh and "Check now"
-  // remain available for manual checks.
+  // Fetch once when the tab becomes visible. Pull-to-refresh remains the only
+  // manual check.
   useFocusEffect(
     useCallback(() => {
       if (hydrated) void refresh();

@@ -641,7 +641,7 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    // Manual "Check now" from the app. Shares the same fetch throttle and
+    // Manual pull-to-refresh from the app. Shares the same fetch throttle and
     // forces alert processing when a new fetch actually happened.
     if (request.method === 'POST' && url.pathname === '/poll-now') {
       const feed = await ensureFreshRoutes();

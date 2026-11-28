@@ -89,8 +89,6 @@ const sv: Record<string, string> = {
   'Not loaded yet': 'Inte laddad ännu',
   History: 'Historik',
   'View full history': 'Visa full historik',
-  'Checking…': 'Kontrollerar…',
-  'Check now': 'Kontrollera nu',
   '{{count}} new · Mark seen': '{{count}} nya · Markera som sedda',
   'Hidden: {{unavailable}} unavailable · {{expired}} expired':
     'Dolda: {{unavailable}} inte tillgängliga · {{expired}} utgångna',

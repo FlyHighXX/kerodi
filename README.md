@@ -181,7 +181,7 @@ notes on-device.
 
 ## Freerider alerts
 
-The Freerider tab reads a worker-owned cache of the public Hertz feed. Devices do not poll hertzfreerider directly: tab opens and filter changes use the cache only, while scheduled polls, Start baselines, and **Check now** share one 60-second fetch throttle. It adds ±10% jitter, honours `Retry-After`, backs off on failures, and exposes `/routes` and `/poll-now` for the app. The visible **Updated** time comes from the last real Hertz fetch, not from cache reads. The store list is cached on-device for seven days.
+The Freerider tab reads a worker-owned cache of the public Hertz feed. Devices do not poll hertzfreerider directly: tab opens and filter changes use the cache only, while scheduled polls, Start baselines, and pull-to-refresh share one 60-second fetch throttle. It adds ±10% jitter, honours `Retry-After`, backs off on failures, and exposes `/routes` and `/poll-now` for the app. The visible **Updated** time comes from the last real Hertz fetch, not from cache reads. The store list is cached on-device for seven days.
 
 Fresh installs default to `http://100.77.0.70:8787` in **Settings → Worker connection**. Tailscale must be connected; no worker token is needed. A custom build can override the default with `EXPO_PUBLIC_FREERIDER_PUSH_ENDPOINT`. The worker is the authoritative history store and keeps every route state indefinitely; the app keeps worker history only in memory for the current session. See [Freerider push worker](docs/freerider-push-worker.md) for the full API and configuration.
 

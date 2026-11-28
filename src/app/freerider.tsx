@@ -172,14 +172,6 @@ export default function FreeriderScreen() {
             <Pressable onPress={() => openHistory(null)} hitSlop={8}>
               <ThemedText type="link">{t('History')}</ThemedText>
             </Pressable>
-            <Pressable
-              onPress={() => void refresh({ force: true })}
-              disabled={refreshing}
-              hitSlop={8}>
-              <ThemedText type="link" themeColor={refreshing ? 'textSecondary' : undefined}>
-                {refreshing ? t('Checking…') : t('Check now')}
-              </ThemedText>
-            </Pressable>
             {newIds.length > 0 ? (
               <Pressable onPress={markAllSeen} hitSlop={8}>
                 <ThemedText type="link">
