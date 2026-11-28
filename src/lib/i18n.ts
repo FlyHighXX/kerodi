@@ -88,9 +88,6 @@ const sv: Record<string, string> = {
   'Updated {{time}}': 'Uppdaterad {{time}}',
   'Next update in {{seconds}}s': 'Nästa uppdatering om {{seconds}} s',
   'Ready for a new update': 'Redo för en ny uppdatering',
-  'Freerider update ready': 'Freerider-uppdatering redo',
-  'Pull down on Freerider to check for new routes.':
-    'Dra ned på Freerider för att söka efter nya rutter.',
   'Not loaded yet': 'Inte laddad ännu',
   History: 'Historik',
   'View full history': 'Visa full historik',

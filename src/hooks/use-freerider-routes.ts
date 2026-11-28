@@ -10,10 +10,6 @@ import {
 } from '@/lib/freerider-history';
 import { fetchWorkerRouteHistory, fetchWorkerRoutes } from '@/lib/freerider-sessions';
 import {
-  clearFreeriderCooldownNotification,
-  replaceFreeriderCooldownNotification,
-} from '@/lib/freerider-push';
-import {
   LOCATIONS_CACHE_TTL_MS,
   readCachedLocations,
   readNewRouteIds,
@@ -56,7 +52,6 @@ export function useFreeriderRoutes() {
   const historyUpdatedAtRef = useRef(0);
   const lastUpdatedRef = useRef<number | null>(null);
   const cooldownUntilRef = useRef<number | null>(null);
-  const cooldownNotificationAtRef = useRef<number | null>(null);
   const baselineRef = useRef(false);
   const lastAttemptRef = useRef(0);
   const inFlightRef = useRef(false);
@@ -184,18 +179,6 @@ export function useFreeriderRoutes() {
       cooldownUntilRef.current = nextCooldown;
       setCooldownNow(Date.now());
       setCooldownUntil(nextCooldown);
-      if (nextCooldown !== cooldownNotificationAtRef.current) {
-        cooldownNotificationAtRef.current = nextCooldown;
-        if (nextCooldown) {
-          void replaceFreeriderCooldownNotification(
-            nextCooldown,
-            translate('Freerider update ready'),
-            translate('Pull down on Freerider to check for new routes.'),
-          );
-        } else {
-          void clearFreeriderCooldownNotification();
-        }
-      }
       void writeSeenRouteIds(seenRef.current);
     } catch (cause) {
       setError(
