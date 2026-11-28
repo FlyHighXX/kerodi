@@ -134,8 +134,9 @@ function handleFeedFailure(error) {
 }
 
 /**
- * Fetch at most once per ROUTE_REFRESH_SECONDS. Scheduled polls, app reads,
- * and manual checks all share this throttle, so hertz sees one steady client.
+ * Fetch at most once per ROUTE_REFRESH_SECONDS. Scheduled polls, Start
+ * baselines, and manual checks share this throttle, so hertz sees one steady
+ * client. Normal app reads use the cached feed without calling this.
  */
 async function ensureFreshRoutes() {
   if (Date.now() < nextFetchAt) {
@@ -624,9 +625,13 @@ const server = createServer(async (request, response) => {
     }
 
     // The app reads this cached feed instead of calling hertzfreerider itself.
-    // A refresh is still throttled to one fetch per ROUTE_REFRESH_SECONDS.
+    // Normal tab/filter changes must never trigger a fetch. Only bootstrap once
+    // if the worker has never fetched; manual checks use /poll-now.
     if (request.method === 'GET' && url.pathname === '/routes') {
-      const feed = await ensureFreshRoutes();
+      const feed =
+        lastFetchAt === 0
+          ? await ensureFreshRoutes()
+          : { routes: latestRoutes, fetchedAt: lastFetchAt, refreshed: false };
       sendJson(response, 200, {
         routes: feed.routes,
         fetchedAt: feed.fetchedAt,
